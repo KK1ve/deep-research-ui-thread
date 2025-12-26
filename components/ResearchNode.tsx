@@ -10,7 +10,8 @@ import {
   ChevronRight, 
   Globe, 
   Cpu, 
-  AlertCircle 
+  AlertCircle,
+  ArrowRightLeft
 } from 'lucide-react';
 
 interface Props {
@@ -23,19 +24,11 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const node = nodes.get(nodeId);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Auto-expand mostly, but maybe auto-collapse completed tool calls to reduce noise
-  // useEffect(() => {
-  //   if (node?.role === Role.TOOL && node.status === 'completed') {
-  //      setIsCollapsed(true);
-  //   }
-  // }, [node?.status]);
-
   if (!node) return null;
 
   const hasChildren = node.children.length > 0;
   const isAgent = node.role === Role.ASSISTANT;
   const isToolCall = node.role === Role.TOOL_CALL;
-  const isToolResult = node.role === Role.TOOL;
   const isError = node.role === Role.ERROR;
 
   // Visual indentation logic
@@ -130,9 +123,10 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
         {!isCollapsed && (
           <div className="px-3 pb-3 pl-[3.25rem] text-sm text-slate-400 overflow-hidden">
             
-            {/* Tool Arguments Visualization */}
+            {/* Tool Arguments (Request) */}
             {isToolCall && toolArgs && (
-              <div className="bg-slate-950/50 rounded p-2 mb-2 font-mono text-xs text-orange-200/80 overflow-x-auto">
+              <div className="bg-slate-950/50 rounded p-2 mb-2 font-mono text-xs text-orange-200/80 overflow-x-auto relative group">
+                <div className="absolute top-1 right-2 text-[10px] text-slate-600 uppercase">Input</div>
                 <pre>{JSON.stringify(toolArgs, null, 2)}</pre>
               </div>
             )}
@@ -147,7 +141,19 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                  </div>
             )}
 
-            {/* Standard Text Content (if not parsed as tool args or if tool result) */}
+            {/* Tool Result (Response) - Rendered if it exists */}
+            {node.toolResult && (
+               <div className="mt-2 bg-slate-900/50 border border-slate-700/50 rounded p-2 font-mono text-xs text-green-200/80 overflow-x-auto relative">
+                  <div className="absolute top-1 right-2 text-[10px] text-slate-600 uppercase flex items-center gap-1">
+                    <ArrowRightLeft size={10} /> Output
+                  </div>
+                  <div className="whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+                    {node.toolResult}
+                  </div>
+               </div>
+            )}
+
+            {/* Standard Text Content (if not parsed as tool args) */}
             {(!isToolCall || !toolArgs) && node.content && (
               <div className="whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm">
                 {node.content}
@@ -155,7 +161,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             )}
 
             {/* Streaming Indicator if no content yet */}
-            {node.status === 'streaming' && !node.content && (
+            {node.status === 'streaming' && !node.content && !node.toolResult && (
               <span className="animate-pulse text-slate-600">Thinking...</span>
             )}
           </div>
