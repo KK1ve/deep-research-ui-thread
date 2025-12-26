@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { fetchConversations, deleteConversation } from '../services/api';
 import { ConversionVO } from '../types';
-import { MessageSquare, Trash2, Plus, Loader2, Menu, X, History } from 'lucide-react';
+import { MessageSquare, Trash2, Plus, Loader2, Menu, X, History, Settings } from 'lucide-react';
+import { SettingsModal } from './SettingsModal';
 
 interface Props {
   onSelectConversion: (uuid: string) => void;
@@ -22,6 +23,7 @@ const Sidebar: React.FC<Props> = ({
 }) => {
   const [conversations, setConversations] = useState<ConversionVO[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     loadConversations();
@@ -56,6 +58,8 @@ const Sidebar: React.FC<Props> = ({
 
   return (
     <>
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
       {/* Mobile Overlay */}
       {isOpen && (
         <div 
@@ -97,7 +101,7 @@ const Sidebar: React.FC<Props> = ({
           </button>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar mb-4">
             {loading && conversations.length === 0 ? (
               <div className="flex justify-center py-4">
                 <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
@@ -138,6 +142,17 @@ const Sidebar: React.FC<Props> = ({
                 </div>
               ))
             )}
+          </div>
+
+          {/* Footer Settings */}
+          <div className="pt-2 border-t border-slate-800">
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-3 w-full p-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <Settings size={18} />
+              <span className="text-sm font-medium">系统设置</span>
+            </button>
           </div>
         </div>
       </div>

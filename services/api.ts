@@ -1,6 +1,12 @@
 import { ChatDTO, ThreadingDTO, ChunkMessage, ApiResponse, PaginationResponse, ConversionVO, MessageEntity } from '../types';
 
-const BASE_URL = 'http://localhost:8000';
+export const getBaseUrl = () => {
+  return localStorage.getItem('app_base_url') || 'http://localhost:8000';
+};
+
+export const setBaseUrl = (url: string) => {
+  localStorage.setItem('app_base_url', url);
+};
 
 /**
  * Initiates the chat to get the message_uuid.
@@ -12,7 +18,7 @@ export const fetchCompletion = async (prompt: string, conversionId?: string): Pr
     conversion_uuid: conversionId || crypto.randomUUID(), 
   };
 
-  const response = await fetch(`${BASE_URL}/chat/completion`, {
+  const response = await fetch(`${getBaseUrl()}/chat/completion`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -54,7 +60,7 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
     message_uuid: messageUuid,
   };
 
-  const response = await fetch(`${BASE_URL}/chat/threading`, {
+  const response = await fetch(`${getBaseUrl()}/chat/threading`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -124,7 +130,7 @@ export const fetchConversations = async (userId: string = 'admin', page: number 
     page_size: pageSize.toString()
   });
 
-  const response = await fetch(`${BASE_URL}/conversion/list?${params}`);
+  const response = await fetch(`${getBaseUrl()}/conversion/list?${params}`);
   if (!response.ok) throw new Error('Failed to fetch conversations');
   
   const json: ApiResponse<PaginationResponse<ConversionVO>> = await response.json();
@@ -134,7 +140,7 @@ export const fetchConversations = async (userId: string = 'admin', page: number 
 };
 
 export const fetchConversationDetail = async (uuid: string): Promise<MessageEntity[]> => {
-  const response = await fetch(`${BASE_URL}/conversion/get/${uuid}`);
+  const response = await fetch(`${getBaseUrl()}/conversion/get/${uuid}`);
   if (!response.ok) throw new Error('Failed to fetch conversation details');
   
   const json: ApiResponse<MessageEntity[]> = await response.json();
@@ -144,7 +150,7 @@ export const fetchConversationDetail = async (uuid: string): Promise<MessageEnti
 };
 
 export const deleteConversation = async (uuid: string): Promise<void> => {
-  const response = await fetch(`${BASE_URL}/conversion/remove`, {
+  const response = await fetch(`${getBaseUrl()}/conversion/remove`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uuid })
@@ -156,7 +162,7 @@ export const deleteConversation = async (uuid: string): Promise<void> => {
 };
 
 export const updateConversation = async (uuid: string, title: string): Promise<void> => {
-  const response = await fetch(`${BASE_URL}/conversion/update`, {
+  const response = await fetch(`${getBaseUrl()}/conversion/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uuid, title })
