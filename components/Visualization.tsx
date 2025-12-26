@@ -20,7 +20,6 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
   const [rootIds, setRootIds] = useState<string[]>([]);
   const [finalReport, setFinalReport] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const loadingRef = useRef(false);
 
   // --- Load Conversation History ---
   useEffect(() => {
@@ -46,7 +45,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
       const messages = await fetchConversationDetail(uuid);
       reconstructTreeFromHistory(messages);
     } catch (err: any) {
-      setError('Failed to load conversation history');
+      setError('加载对话历史失败');
     } finally {
       setIsSearching(false);
     }
@@ -100,14 +99,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
       if (msg.role === Role.TOOL) {
         // In history, 'tool' role is the result. 'tool_call' was the args.
         node.toolResult = msg.message;
-        // Also update role if needed to display correctly? 
-        // We usually keep the 'tool_call' role on the node for display logic 
-        // because that determines the icon/color, while toolResult adds the output box.
       } else {
-        // Assistant text or Tool Call args
-        // If the node was created as TOOL_CALL, and this is TOOL_CALL, message is args.
-        // If node is ASSISTANT, message is text.
-        // In history, usually we get tool_call first, then tool.
         node.content = msg.message;
       }
       
@@ -142,8 +134,6 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
     e.preventDefault();
     if (!query.trim() || isSearching) return;
 
-    // If we don't have a conversion ID, generate one for frontend state
-    // But for API, we pass it to fetchCompletion.
     let activeConversionId = conversionId;
     
     // If starting new chat
@@ -172,7 +162,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
       }
 
     } catch (err: any) {
-      setError(err.message || 'An unknown error occurred');
+      setError(err.message || '发生未知错误');
     } finally {
       setIsSearching(false);
       setQuery(''); // Clear input after send
@@ -249,84 +239,90 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
     if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [nodes]);
+  }, [nodes, finalReport]); // Also scroll when final report appears
 
   return (
-    <div className="flex flex-col h-full w-full max-w-5xl mx-auto p-4 md:p-6 gap-6">
+    <div className="flex flex-col h-full w-full max-w-5xl mx-auto gap-4 relative">
       
-      {/* Header */}
-      <div className="flex flex-col gap-2 animate-in slide-in-from-top-4 duration-500">
-        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 flex items-center gap-3">
-          <Activity className="w-8 h-8 text-blue-500" />
-          Deep Research
-        </h1>
-        <p className="text-slate-400">
-          Agent-based hierarchical research visualization
-        </p>
+      {/* Header - Fixed Height */}
+      <div className="flex-none p-4 md:p-6 pb-2">
+        <div className="flex flex-col gap-2">
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 flex items-center gap-3">
+            <Activity className="w-8 h-8 text-blue-500" />
+            深度研究
+            </h1>
+            <p className="text-slate-400">
+            基于智能体的分层研究可视化系统
+            </p>
+        </div>
       </div>
 
-      {/* Input Area */}
-      <form onSubmit={handleSearch} className="relative z-20">
-        <div className="relative group">
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-200"></div>
-          <div className="relative flex items-center bg-surface rounded-lg border border-slate-700 shadow-xl overflow-hidden">
-            <Search className="ml-4 w-5 h-5 text-slate-500" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={conversionId ? "Ask a follow-up question..." : "What would you like to research?"}
-              className="w-full bg-transparent p-4 text-slate-200 focus:outline-none placeholder:text-slate-600"
-              disabled={isSearching}
-            />
-            <button
-              type="submit"
-              disabled={isSearching || !query.trim()}
-              className="mr-2 p-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </form>
-
-      {/* Error Banner */}
-      {error && (
-        <div className="p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-200 text-sm animate-in slide-in-from-top-2">
-          {error}
-        </div>
-      )}
-
-      {/* Main Visualization Area */}
+      {/* Main Visualization Area - Scrollable */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto pr-2 relative z-10 space-y-4 pb-20 scroll-smooth"
+        className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 scroll-smooth custom-scrollbar"
       >
         {!isSearching && rootIds.length === 0 && !error && (
-          <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 mt-20">
+          <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 min-h-[300px]">
             <Terminal className="w-16 h-16 opacity-20" />
-            <p className="text-sm uppercase tracking-widest opacity-50">System Ready</p>
+            <p className="text-sm uppercase tracking-widest opacity-50">系统就绪</p>
           </div>
         )}
 
         {/* Tree Render */}
-        {rootIds.map(id => (
-          <ResearchNode 
-            key={id} 
-            nodeId={id} 
-            nodes={nodes} 
-            depth={0} 
-          />
-        ))}
+        <div className="space-y-4">
+            {rootIds.map(id => (
+            <ResearchNode 
+                key={id} 
+                nodeId={id} 
+                nodes={nodes} 
+                depth={0} 
+            />
+            ))}
+        </div>
 
         {finalReport && <FinalReport report={finalReport} />}
 
         {isSearching && !finalReport && (
-           <div className="flex items-center gap-2 text-xs text-slate-500 animate-pulse pl-4">
+           <div className="flex items-center gap-2 text-xs text-slate-500 animate-pulse pl-4 mt-4">
              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-             Processing data stream...
+             正在处理数据流...
            </div>
         )}
+      </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mx-4 md:mx-6 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-200 text-sm animate-in slide-in-from-bottom-2">
+          {error}
+        </div>
+      )}
+
+      {/* Input Area - Fixed Bottom */}
+      <div className="flex-none p-4 md:p-6 pt-2 bg-gradient-to-t from-background via-background to-transparent z-20">
+        <form onSubmit={handleSearch} className="relative">
+            <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-200"></div>
+            <div className="relative flex items-center bg-surface rounded-lg border border-slate-700 shadow-xl overflow-hidden">
+                <Search className="ml-4 w-5 h-5 text-slate-500" />
+                <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={conversionId ? "请输入后续问题..." : "您想研究什么？"}
+                className="w-full bg-transparent p-4 text-slate-200 focus:outline-none placeholder:text-slate-600"
+                disabled={isSearching}
+                />
+                <button
+                type="submit"
+                disabled={isSearching || !query.trim()}
+                className="mr-2 p-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </button>
+            </div>
+            </div>
+        </form>
       </div>
     </div>
   );

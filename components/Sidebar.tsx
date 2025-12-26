@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { fetchConversations, deleteConversation } from '../services/api';
 import { ConversionVO } from '../types';
-import { MessageSquare, Trash2, Plus, Loader2, Menu, X } from 'lucide-react';
+import { MessageSquare, Trash2, Plus, Loader2, Menu, X, History } from 'lucide-react';
 
 interface Props {
   onSelectConversion: (uuid: string) => void;
@@ -41,7 +41,7 @@ const Sidebar: React.FC<Props> = ({
 
   const handleDelete = async (e: React.MouseEvent, uuid: string) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this conversation?')) return;
+    if (!window.confirm('确定要删除这段对话吗？')) return;
     
     try {
       await deleteConversation(uuid);
@@ -76,7 +76,8 @@ const Sidebar: React.FC<Props> = ({
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-              <span className="text-blue-500">Deep</span>History
+              <History className="w-6 h-6 text-blue-500" />
+              <span className="text-slate-100">历史记录</span>
             </h2>
             <button onClick={onClose} className="md:hidden text-slate-400">
               <X size={24} />
@@ -92,7 +93,7 @@ const Sidebar: React.FC<Props> = ({
             className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors mb-4 font-medium"
           >
             <Plus size={18} />
-            New Research
+            新建研究
           </button>
 
           {/* List */}
@@ -120,7 +121,7 @@ const Sidebar: React.FC<Props> = ({
                     <MessageSquare size={16} className={currentConversionId === conv.conversion_uuid ? 'text-blue-400' : 'text-slate-500'} />
                     <div className="flex flex-col overflow-hidden">
                        <span className="truncate text-sm font-medium">
-                         {conv.title || 'Untitled Research'}
+                         {conv.title || '未命名研究'}
                        </span>
                        <span className="text-[10px] text-slate-500">
                          {new Date(conv.create_time).toLocaleDateString()}

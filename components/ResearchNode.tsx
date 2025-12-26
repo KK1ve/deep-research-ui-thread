@@ -54,6 +54,18 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     }
   };
 
+  const getRoleName = (role: Role) => {
+    switch (role) {
+      case Role.HUMAN: return '用户';
+      case Role.ASSISTANT: return '智能体';
+      case Role.TOOL_CALL: return '工具调用';
+      case Role.TOOL: return '工具结果';
+      case Role.SYSTEM: return '系统';
+      case Role.ERROR: return '错误';
+      default: return role;
+    }
+  };
+
   const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-orange-500/30' : 'border-slate-700';
   const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? 'bg-orange-900/10' : 'bg-slate-800/30';
 
@@ -101,10 +113,10 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2">
               <span className={`text-sm font-semibold truncate ${isAgent ? 'text-purple-300' : 'text-slate-300'}`}>
-                {node.name || 'Unknown Agent'}
+                {node.name || '未知智能体'}
               </span>
               <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
-                {node.role.replace('_', ' ')}
+                {getRoleName(node.role)}
               </span>
               {node.status === 'completed' && !isError && (
                 <CheckCircle2 className="w-3 h-3 text-green-500/50" />
@@ -126,7 +138,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             {/* Tool Arguments (Request) */}
             {isToolCall && toolArgs && (
               <div className="bg-slate-950/50 rounded p-2 mb-2 font-mono text-xs text-orange-200/80 overflow-x-auto relative group">
-                <div className="absolute top-1 right-2 text-[10px] text-slate-600 uppercase">Input</div>
+                <div className="absolute top-1 right-2 text-[10px] text-slate-600 uppercase">输入</div>
                 <pre>{JSON.stringify(toolArgs, null, 2)}</pre>
               </div>
             )}
@@ -135,7 +147,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             {isFinalReportTool && toolArgs?.report && (
                  <div className="mt-2 p-4 bg-green-900/20 border border-green-500/30 rounded text-green-100 prose prose-invert prose-sm max-w-none">
                     <div className="font-bold text-green-400 mb-1 flex items-center gap-2">
-                        <FileText size={14}/> Report Generated
+                        <FileText size={14}/> 报告已生成
                     </div>
                     {toolArgs.report}
                  </div>
@@ -145,7 +157,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             {node.toolResult && (
                <div className="mt-2 bg-slate-900/50 border border-slate-700/50 rounded p-2 font-mono text-xs text-green-200/80 overflow-x-auto relative">
                   <div className="absolute top-1 right-2 text-[10px] text-slate-600 uppercase flex items-center gap-1">
-                    <ArrowRightLeft size={10} /> Output
+                    <ArrowRightLeft size={10} /> 输出
                   </div>
                   <div className="whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
                     {node.toolResult}
@@ -162,7 +174,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
 
             {/* Streaming Indicator if no content yet */}
             {node.status === 'streaming' && !node.content && !node.toolResult && (
-              <span className="animate-pulse text-slate-600">Thinking...</span>
+              <span className="animate-pulse text-slate-600">思考中...</span>
             )}
           </div>
         )}
