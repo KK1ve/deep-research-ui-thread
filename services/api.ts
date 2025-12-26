@@ -9,7 +9,7 @@ export const fetchCompletion = async (prompt: string): Promise<string> => {
   const payload: ChatDTO = {
     prompt,
     user_id: 'admin',
-    conversion_uuid: crypto.randomUUID(), // Generate a client-side UUID if needed or null
+    conversion_uuid: crypto.randomUUID(), 
   };
 
   const response = await fetch(`${BASE_URL}/chat/completion`, {
@@ -21,21 +21,35 @@ export const fetchCompletion = async (prompt: string): Promise<string> => {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to start chat: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to start chat: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
-  // Assuming the structure based on DefaultResponseVo_MessageVO_
-  // The API likely returns the message_uuid in data.data or similar. 
-  // Based on standard patterns, let's assume data.data is the UUID string or an object containing it.
-  // Adjusting based on typical FastApi implementations:
-  return data.data; 
+  
+  // Extract message_uuid safely handling both string and object wrappers
+  if (data.data && typeof data.data === 'string') {
+    return data.data;
+  }
+  
+  // If data.data is an object containing message_uuid (common in some controller setups)
+  if (data.data && typeof data.data === 'object' && data.data.message_uuid) {
+    return data.data.message_uuid;
+  }
+  
+  console.error("Unexpected response structure:", data);
+  throw new Error("Could not extract message_uuid from completion response");
 };
 
 /**
  * Connects to the threading endpoint and yields chunks.
  */
 export async function* streamThreading(messageUuid: string): AsyncGenerator<ChunkMessage, void, unknown> {
+  // Guard clause to ensure we are sending a string
+  if (typeof messageUuid !== 'string') {
+    throw new Error(`Invalid message_uuid: expected string, got ${typeof messageUuid}`);
+  }
+
   const payload: ThreadingDTO = {
     message_uuid: messageUuid,
   };
@@ -49,7 +63,8 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to stream threading: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to stream threading: ${response.status} ${errorText}`);
   }
 
   if (!response.body) {
@@ -68,37 +83,27 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
 
-      // Logic to parse multiple JSON objects from the stream.
-      // Often streams send concatenated JSONs like {}{}.
-      // Or NDJSON (newlines). 
-      // We'll try to split by some delimiter or parse aggressively.
-      
-      // Heuristic: Try to split by `}\n{` or `}{` if compact.
-      // For safety, let's assume NDJSON or standard chunks.
-      
-      // Simple NDJSON parser
       const lines = buffer.split('\n');
-      // Keep the last line in the buffer as it might be incomplete
       buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (line.trim()) {
             try {
-                // Remove any "data: " prefix if using SSE format accidentally mixed in
+                // Support SSE format just in case, though usually raw JSON stream
                 const cleanLine = line.replace(/^data: /, '');
                 const json = JSON.parse(cleanLine);
                 yield json;
             } catch (e) {
-                console.warn('Failed to parse chunk JSON', line, e);
+                console.warn('Failed to parse chunk JSON', line);
             }
         }
       }
     }
     
-    // Process remaining buffer
     if (buffer.trim()) {
         try {
-            const json = JSON.parse(buffer);
+            const cleanLine = buffer.replace(/^data: /, '');
+            const json = JSON.parse(cleanLine);
             yield json;
         } catch (e) {
             console.warn('Failed to parse final chunk', buffer);
