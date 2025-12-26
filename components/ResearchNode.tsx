@@ -66,6 +66,19 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     }
   };
 
+  const getTranslatedName = (name: string) => {
+    if (!name) return '未知';
+    const lower = name.toLowerCase();
+    if (lower.includes('web_search')) return '网络搜索';
+    if (lower.includes('search')) return '搜索';
+    if (lower.includes('fetch')) return '网页抓取';
+    if (lower.includes('complete_task')) return '任务完成';
+    if (lower.includes('run_blocking_subagent')) return '调用子智能体';
+    if (lower.includes('subagent')) return '子智能体';
+    if (lower === 'lead_agent' || lower === 'main') return '主控智能体';
+    return name;
+  };
+
   const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-orange-500/30' : 'border-slate-700';
   const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? 'bg-orange-900/10' : 'bg-slate-800/30';
 
@@ -113,7 +126,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2">
               <span className={`text-sm font-semibold truncate ${isAgent ? 'text-purple-300' : 'text-slate-300'}`}>
-                {node.name || '未知智能体'}
+                {getTranslatedName(node.name)}
               </span>
               <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
                 {getRoleName(node.role)}

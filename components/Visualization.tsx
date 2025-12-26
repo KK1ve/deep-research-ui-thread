@@ -74,7 +74,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
           id: nodeId,
           parentId: msg.parent_id || null,
           role: msg.role,
-          name: msg.name || 'Unknown',
+          name: msg.name || '未知',
           content: '',
           children: [],
           status: 'completed', // History items are completed by default
@@ -181,7 +181,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
           id: nodeId,
           parentId: parent_id || null,
           role, 
-          name: name || 'Unknown',
+          name: name || '未知',
           content: '',
           children: [],
           status: 'streaming',
@@ -242,7 +242,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
   }, [nodes, finalReport]);
 
   return (
-    <div className="flex flex-col h-full w-full max-w-5xl mx-auto gap-4 relative">
+    <div className="flex flex-col h-full w-full max-w-5xl mx-auto relative">
       
       {/* Header - Fixed Height */}
       <div className="flex-none p-4 md:p-6 pb-2">
@@ -260,7 +260,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
       {/* Main Visualization Area - Scrollable */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 scroll-smooth custom-scrollbar"
+        className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 pb-4 scroll-smooth custom-scrollbar"
       >
         {!isSearching && rootIds.length === 0 && !error && (
           <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 min-h-[300px]">
@@ -289,11 +289,14 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
              正在处理数据流...
            </div>
         )}
+        
+        {/* Spacer to ensure last element is visible above input */}
+        <div className="h-4"></div>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="mx-4 md:mx-6 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-200 text-sm animate-in slide-in-from-bottom-2">
+        <div className="mx-4 md:mx-6 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-200 text-sm animate-in slide-in-from-bottom-2 mb-2">
           {error}
         </div>
       )}
