@@ -1,15 +1,15 @@
-import { ChatDTO, ThreadingDTO, ChunkMessage } from '../types';
+import { ChatDTO, ThreadingDTO, ChunkMessage, ApiResponse, PaginationResponse, ConversionVO, MessageEntity } from '../types';
 
 const BASE_URL = 'http://localhost:8000';
 
 /**
  * Initiates the chat to get the message_uuid.
  */
-export const fetchCompletion = async (prompt: string): Promise<string> => {
+export const fetchCompletion = async (prompt: string, conversionId?: string): Promise<string> => {
   const payload: ChatDTO = {
     prompt,
     user_id: 'admin',
-    conversion_uuid: crypto.randomUUID(), 
+    conversion_uuid: conversionId || crypto.randomUUID(), 
   };
 
   const response = await fetch(`${BASE_URL}/chat/completion`, {
@@ -114,3 +114,55 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
     reader.releaseLock();
   }
 }
+
+// --- Conversation API ---
+
+export const fetchConversations = async (userId: string = 'admin', page: number = 1, pageSize: number = 20): Promise<PaginationResponse<ConversionVO>> => {
+  const params = new URLSearchParams({
+    user_id: userId,
+    page_num: page.toString(),
+    page_size: pageSize.toString()
+  });
+
+  const response = await fetch(`${BASE_URL}/conversion/list?${params}`);
+  if (!response.ok) throw new Error('Failed to fetch conversations');
+  
+  const json: ApiResponse<PaginationResponse<ConversionVO>> = await response.json();
+  if (json.code !== 200 || !json.data) throw new Error(json.message || 'Error fetching list');
+  
+  return json.data;
+};
+
+export const fetchConversationDetail = async (uuid: string): Promise<MessageEntity[]> => {
+  const response = await fetch(`${BASE_URL}/conversion/get/${uuid}`);
+  if (!response.ok) throw new Error('Failed to fetch conversation details');
+  
+  const json: ApiResponse<MessageEntity[]> = await response.json();
+  if (json.code !== 200 || !json.data) throw new Error(json.message || 'Error fetching details');
+  
+  return json.data;
+};
+
+export const deleteConversation = async (uuid: string): Promise<void> => {
+  const response = await fetch(`${BASE_URL}/conversion/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid })
+  });
+  
+  if (!response.ok) throw new Error('Failed to delete conversation');
+  const json = await response.json();
+  if (json.code !== 200) throw new Error(json.message);
+};
+
+export const updateConversation = async (uuid: string, title: string): Promise<void> => {
+  const response = await fetch(`${BASE_URL}/conversion/update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid, title })
+  });
+  
+  if (!response.ok) throw new Error('Failed to update conversation');
+  const json = await response.json();
+  if (json.code !== 200) throw new Error(json.message);
+};

@@ -45,3 +45,45 @@ export interface ResearchNode {
   args?: Record<string, any>; // For parsed tool call arguments
   timestamp: number;
 }
+
+// --- New Types for Conversation History ---
+
+export interface DisplayMessage {
+  role: Role;
+  name?: string | null;
+  parent_id?: string | null;
+  id?: string | null;
+  message: string;
+}
+
+export interface MessageEntity {
+  message_uuid: string;
+  conversion_uuid: string;
+  content: DisplayMessage[]; // The flattened tree for this message
+  role: string; // 'human' | 'assistant'
+  thread_status?: boolean | null;
+}
+
+export interface ConversionVO {
+  conversion_uuid: string;
+  title: string;
+  create_time: string;
+  update_time: string;
+  user_id: string;
+}
+
+export interface PaginationResponse<T> {
+  items: T[];
+  total: number;
+  page_num: number;
+  page_size: number;
+  total_pages: number;
+  has_previous: boolean;
+  has_next: boolean;
+}
+
+export interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T | null;
+}

@@ -1,11 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { fetchCompletion, streamThreading } from '../services/api';
-import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage } from '../types';
+import { fetchCompletion, streamThreading, fetchConversationDetail } from '../services/api';
+import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage, MessageEntity, DisplayMessage } from '../types';
 import ResearchNode from './ResearchNode';
 import { FinalReport } from './FinalReport';
 import { Search, Activity, Terminal, Loader2, Send } from 'lucide-react';
 
-const Visualization: React.FC = () => {
+interface Props {
+  conversionId: string | null;
+  onConversionCreated: (uuid: string) => void;
+}
+
+const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) => {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,8 +20,115 @@ const Visualization: React.FC = () => {
   const [rootIds, setRootIds] = useState<string[]>([]);
   const [finalReport, setFinalReport] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
 
-  // Helper to update nodes map immutably
+  // --- Load Conversation History ---
+  useEffect(() => {
+    if (conversionId) {
+      loadHistory(conversionId);
+    } else {
+      // Reset if new chat
+      setNodes(new Map());
+      setRootIds([]);
+      setFinalReport(null);
+      setQuery('');
+    }
+  }, [conversionId]);
+
+  const loadHistory = async (uuid: string) => {
+    setIsSearching(true);
+    setNodes(new Map());
+    setRootIds([]);
+    setFinalReport(null);
+    setError(null);
+
+    try {
+      const messages = await fetchConversationDetail(uuid);
+      reconstructTreeFromHistory(messages);
+    } catch (err: any) {
+      setError('Failed to load conversation history');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const reconstructTreeFromHistory = (entities: MessageEntity[]) => {
+    const newNodes = new Map<string, ResearchNodeType>();
+    const newRoots: string[] = [];
+    let lastReport = null;
+
+    // Flatten all display messages from all entities
+    const allMessages: DisplayMessage[] = [];
+    entities.forEach(entity => {
+        if (entity.content && Array.isArray(entity.content)) {
+            allMessages.push(...entity.content);
+        }
+    });
+
+    allMessages.forEach(msg => {
+      const nodeId = msg.id || 'unknown';
+      let node = newNodes.get(nodeId);
+
+      // Create node if not exists
+      if (!node) {
+        node = {
+          id: nodeId,
+          parentId: msg.parent_id || null,
+          role: msg.role,
+          name: msg.name || 'Unknown',
+          content: '',
+          children: [],
+          status: 'completed', // History items are completed by default
+          timestamp: Date.now() // We don't have exact timestamp per msg, use current
+        };
+        newNodes.set(nodeId, node);
+
+        if (msg.parent_id) {
+          const parent = newNodes.get(msg.parent_id);
+          if (parent && !parent.children.includes(nodeId)) {
+            parent.children.push(nodeId);
+          }
+        } else {
+           // If no parent, it's a root
+           if (!newRoots.includes(nodeId)) {
+             newRoots.push(nodeId);
+           }
+        }
+      }
+
+      // Merge Logic for Tool Call (Args) vs Tool (Result)
+      if (msg.role === Role.TOOL) {
+        // In history, 'tool' role is the result. 'tool_call' was the args.
+        node.toolResult = msg.message;
+        // Also update role if needed to display correctly? 
+        // We usually keep the 'tool_call' role on the node for display logic 
+        // because that determines the icon/color, while toolResult adds the output box.
+      } else {
+        // Assistant text or Tool Call args
+        // If the node was created as TOOL_CALL, and this is TOOL_CALL, message is args.
+        // If node is ASSISTANT, message is text.
+        // In history, usually we get tool_call first, then tool.
+        node.content = msg.message;
+      }
+      
+      // Update completion status for parents
+      if (msg.name === 'complete_task' && msg.parent_id) {
+         const parent = newNodes.get(msg.parent_id);
+         if (parent) parent.status = 'completed';
+      }
+
+      // Check for final report in Assistant nodes at root level
+      if (msg.role === Role.ASSISTANT && !msg.parent_id) {
+        lastReport = msg.message;
+      }
+    });
+
+    setNodes(newNodes);
+    setRootIds(newRoots);
+    setFinalReport(lastReport);
+  };
+
+  // --- Helper to update nodes map immutably ---
   const updateNodes = useCallback((updater: (map: Map<string, ResearchNodeType>) => void) => {
     setNodes(prev => {
       const newMap = new Map(prev);
@@ -25,20 +137,32 @@ const Visualization: React.FC = () => {
     });
   }, []);
 
+  // --- Search Handler ---
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isSearching) return;
 
-    // Reset state
+    // If we don't have a conversion ID, generate one for frontend state
+    // But for API, we pass it to fetchCompletion.
+    let activeConversionId = conversionId;
+    
+    // If starting new chat
+    if (!activeConversionId) {
+      activeConversionId = crypto.randomUUID();
+      // Notify parent to update URL/State
+      onConversionCreated(activeConversionId);
+      // Reset view
+      setNodes(new Map());
+      setRootIds([]);
+      setFinalReport(null);
+    }
+
     setIsSearching(true);
     setError(null);
-    setNodes(new Map());
-    setRootIds([]);
-    setFinalReport(null);
-
+    
     try {
       // 1. Start Chat
-      const messageUuid = await fetchCompletion(query);
+      const messageUuid = await fetchCompletion(query, activeConversionId);
       
       // 2. Start Streaming
       const stream = streamThreading(messageUuid);
@@ -51,25 +175,22 @@ const Visualization: React.FC = () => {
       setError(err.message || 'An unknown error occurred');
     } finally {
       setIsSearching(false);
+      setQuery(''); // Clear input after send
     }
   };
 
   const processChunk = (chunk: ChunkMessage) => {
     const { id, parent_id, role, name, message, type } = chunk;
-
-    // We assume 'id' is always present for valid nodes, except maybe very root
     const nodeId = id || 'unknown';
 
     updateNodes((map) => {
       let node = map.get(nodeId);
 
-      // Create node if it doesn't exist
-      // We do this regardless of 'type' because streams might be out of order or start with 'append'
       if (!node) {
         node = {
           id: nodeId,
           parentId: parent_id || null,
-          role, // Initial role (likely tool_call or assistant)
+          role, 
           name: name || 'Unknown',
           content: '',
           children: [],
@@ -81,7 +202,6 @@ const Visualization: React.FC = () => {
         if (parent_id) {
           const parent = map.get(parent_id);
           if (parent) {
-            // Avoid duplicates
             if (!parent.children.includes(nodeId)) {
               parent.children.push(nodeId);
             }
@@ -91,31 +211,23 @@ const Visualization: React.FC = () => {
         }
       }
 
-      // Logic: Agent Completion
-      // If an agent calls 'complete_task', it means they are done thinking.
-      // We look at the parent_id of the tool call to find the Agent.
+      // Check for completion signal
       if (name === 'complete_task' && parent_id) {
         const parent = map.get(parent_id);
-        if (parent) {
-          parent.status = 'completed';
-        }
+        if (parent) parent.status = 'completed';
       }
 
-      // Logic: Merging Tool Call (Args) and Tool (Result)
+      // Merge Tool Result
       if (role === Role.TOOL) {
-        // This is the result part of a tool interaction
-        // It shares the same ID as the tool_call, so we are updating the existing node
         if (type === MessageType.NEW) {
             node.toolResult = message || '';
         } else {
             node.toolResult = (node.toolResult || '') + message;
         }
-        // If we have a result, the tool execution is effectively done
         node.status = 'completed';
       } else {
-        // This is Assistant text OR Tool Call arguments
+        // Append Content
         if (type === MessageType.NEW) {
-            // Only overwrite content if it's explicitly a NEW message for the main content
             node.content = message || '';
         } else {
             node.content += message;
@@ -125,9 +237,6 @@ const Visualization: React.FC = () => {
       // Handle Final Type
       if (type === MessageType.FINAL) {
         node.status = 'completed';
-        
-        // Check for Lead Agent Final Report
-        // Usually lead agent has no parent_id and role is assistant
         if (role === Role.ASSISTANT && !node.parentId) {
             setFinalReport(node.content);
         }
@@ -135,7 +244,7 @@ const Visualization: React.FC = () => {
     });
   };
 
-  // Auto-scroll to bottom of tree
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -143,7 +252,7 @@ const Visualization: React.FC = () => {
   }, [nodes]);
 
   return (
-    <div className="flex flex-col h-full max-w-5xl mx-auto p-4 md:p-6 gap-6">
+    <div className="flex flex-col h-full w-full max-w-5xl mx-auto p-4 md:p-6 gap-6">
       
       {/* Header */}
       <div className="flex flex-col gap-2 animate-in slide-in-from-top-4 duration-500">
@@ -156,7 +265,7 @@ const Visualization: React.FC = () => {
         </p>
       </div>
 
-      {/* Search Bar */}
+      {/* Input Area */}
       <form onSubmit={handleSearch} className="relative z-20">
         <div className="relative group">
           <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg blur opacity-30 group-hover:opacity-60 transition duration-200"></div>
@@ -166,7 +275,7 @@ const Visualization: React.FC = () => {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="What would you like to research?"
+              placeholder={conversionId ? "Ask a follow-up question..." : "What would you like to research?"}
               className="w-full bg-transparent p-4 text-slate-200 focus:outline-none placeholder:text-slate-600"
               disabled={isSearching}
             />
@@ -193,7 +302,6 @@ const Visualization: React.FC = () => {
         ref={scrollRef}
         className="flex-1 overflow-y-auto pr-2 relative z-10 space-y-4 pb-20 scroll-smooth"
       >
-        {/* Placeholder if empty */}
         {!isSearching && rootIds.length === 0 && !error && (
           <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 mt-20">
             <Terminal className="w-16 h-16 opacity-20" />
@@ -211,10 +319,8 @@ const Visualization: React.FC = () => {
           />
         ))}
 
-        {/* Final Report */}
         {finalReport && <FinalReport report={finalReport} />}
 
-        {/* Loading Indicator at bottom if active */}
         {isSearching && !finalReport && (
            <div className="flex items-center gap-2 text-xs text-slate-500 animate-pulse pl-4">
              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
