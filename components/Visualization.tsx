@@ -239,7 +239,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
     if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [nodes, finalReport]); // Also scroll when final report appears
+  }, [nodes, finalReport]);
 
   return (
     <div className="flex flex-col h-full w-full max-w-5xl mx-auto gap-4 relative">

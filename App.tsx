@@ -42,7 +42,7 @@ const App: React.FC = () => {
             <button onClick={() => setIsSidebarOpen(true)} className="text-slate-400 hover:text-white">
               <Menu size={24} />
             </button>
-            <span className="ml-4 font-bold text-slate-200">Deep Research</span>
+            <span className="ml-4 font-bold text-slate-200">深度研究</span>
          </div>
 
          <Visualization 
