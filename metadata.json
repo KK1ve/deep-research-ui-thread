@@ -1,0 +1,5 @@
+{
+  "name": "Deep Research Viewer",
+  "description": "A real-time visualization interface for hierarchical agent-based deep research tasks, displaying agent interactions, tool usage, and final reports.",
+  "requestFramePermissions": []
+}
