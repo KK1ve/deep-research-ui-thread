@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en" class="h-full">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>深度研究 Deep Research</title>
+    <title>Deep Research Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -26,45 +26,32 @@
     <style>
       /* Custom scrollbar for webkit */
       ::-webkit-scrollbar {
-        width: 12px;
-        height: 12px;
+        width: 8px;
+        height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #0f172a; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 6px;
-        border: 3px solid #0f172a; /* Creates a padding effect */
+        background: #334155; 
+        border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; /* Lighter color on hover */
-      }
-      
-      /* Standard scrollbar for Firefox */
-      * {
-        scrollbar-width: thin;
-        scrollbar-color: #475569 #0f172a;
-      }
-
-      /* Utility class to force scrollbar always visible if needed */
-      .custom-scrollbar {
-        overflow-y: auto;
+        background: #475569; 
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0"
+    "react": "https://esm.sh/react@^19.2.3"
   }
 }
 </script>
 </head>
   <body class="bg-background text-slate-200 antialiased h-screen w-screen overflow-hidden">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <div id="root" class="h-full w-full"></div>
   </body>
 </html>
