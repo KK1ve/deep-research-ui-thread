@@ -8,14 +8,20 @@ export const setBaseUrl = (url: string) => {
   localStorage.setItem('app_base_url', url);
 };
 
+interface CompletionResponse {
+  messageUuid: string;
+  conversionUuid?: string;
+}
+
 /**
  * Initiates the chat to get the message_uuid.
  */
-export const fetchCompletion = async (prompt: string, conversionId?: string): Promise<string> => {
+export const fetchCompletion = async (prompt: string, conversionId?: string | null): Promise<CompletionResponse> => {
   const payload: ChatDTO = {
     prompt,
     user_id: 'admin',
-    conversion_uuid: conversionId || crypto.randomUUID(), 
+    // If conversionId is explicitly null or undefined, send null to indicate new chat
+    conversion_uuid: conversionId || null, 
   };
 
   const response = await fetch(`${getBaseUrl()}/chat/completion`, {
@@ -33,18 +39,28 @@ export const fetchCompletion = async (prompt: string, conversionId?: string): Pr
 
   const data = await response.json();
   
-  // Extract message_uuid safely handling both string and object wrappers
-  if (data.data && typeof data.data === 'string') {
-    return data.data;
+  // Extract message_uuid and conversion_uuid safely
+  let messageUuid = '';
+  let conversionUuid: string | undefined = undefined;
+
+  if (data.data) {
+    if (typeof data.data === 'string') {
+      messageUuid = data.data;
+    } else if (typeof data.data === 'object') {
+      messageUuid = data.data.message_uuid;
+      // Capture conversion_uuid if returned by the backend
+      if (data.data.conversion_uuid) {
+        conversionUuid = data.data.conversion_uuid;
+      }
+    }
   }
-  
-  // If data.data is an object containing message_uuid (common in some controller setups)
-  if (data.data && typeof data.data === 'object' && data.data.message_uuid) {
-    return data.data.message_uuid;
+
+  if (!messageUuid) {
+    console.error("Unexpected response structure:", data);
+    throw new Error("Could not extract message_uuid from completion response");
   }
-  
-  console.error("Unexpected response structure:", data);
-  throw new Error("Could not extract message_uuid from completion response");
+
+  return { messageUuid, conversionUuid };
 };
 
 /**
@@ -95,7 +111,7 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       for (const line of lines) {
         if (line.trim()) {
             try {
-                // Support SSE format just in case, though usually raw JSON stream
+                // Handle potential "data: " prefix for SSE compatibility
                 const cleanLine = line.replace(/^data: /, '');
                 const json = JSON.parse(cleanLine);
                 yield json;

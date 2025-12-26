@@ -11,7 +11,8 @@ import {
   Globe, 
   Cpu, 
   AlertCircle,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Workflow
 } from 'lucide-react';
 
 interface Props {
@@ -33,6 +34,8 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
 
   // Visual indentation logic
   const paddingLeft = `${depth * 1.5}rem`;
+  
+  const isSubAgentCall = node.name?.toLowerCase().includes('run_blocking_subagent');
 
   const getIcon = () => {
     if (node.status === 'streaming') return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
@@ -42,6 +45,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
       case Role.ASSISTANT:
         return <Bot className="w-4 h-4 text-purple-400" />;
       case Role.TOOL_CALL:
+        if (isSubAgentCall) return <Workflow className="w-4 h-4 text-indigo-400" />;
         if (node.name?.includes('search')) return <Search className="w-4 h-4 text-orange-400" />;
         if (node.name?.includes('fetch')) return <Globe className="w-4 h-4 text-blue-400" />;
         return <Cpu className="w-4 h-4 text-orange-400" />;
@@ -79,8 +83,8 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     return name;
   };
 
-  const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-orange-500/30' : 'border-slate-700';
-  const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? 'bg-orange-900/10' : 'bg-slate-800/30';
+  const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-slate-700' : 'border-slate-700';
+  const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? (isSubAgentCall ? 'bg-indigo-900/10' : 'bg-slate-800/30') : 'bg-slate-800/30';
 
   // Parse content if it's a tool call to show formatted args
   const toolArgs = useMemo(() => {
@@ -119,13 +123,13 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           className="flex items-center p-3 gap-3 cursor-pointer select-none"
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
-          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-800 border border-slate-700">
+          <div className={`flex items-center justify-center w-6 h-6 rounded-md bg-slate-800 border ${isAgent ? 'border-purple-500/50' : 'border-slate-700'}`}>
             {getIcon()}
           </div>
           
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <span className={`text-sm font-semibold truncate ${isAgent ? 'text-purple-300' : 'text-slate-300'}`}>
+              <span className={`text-sm font-semibold truncate ${isAgent ? 'text-purple-300' : isSubAgentCall ? 'text-indigo-300' : 'text-slate-300'}`}>
                 {getTranslatedName(node.name)}
               </span>
               <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
@@ -162,7 +166,9 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                     <div className="font-bold text-green-400 mb-1 flex items-center gap-2">
                         <FileText size={14}/> 报告已生成
                     </div>
-                    {toolArgs.report}
+                    <div className="line-clamp-6 hover:line-clamp-none transition-all duration-300 cursor-pointer" title="点击展开">
+                        {toolArgs.report}
+                    </div>
                  </div>
             )}
 

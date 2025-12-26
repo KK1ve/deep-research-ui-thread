@@ -78,7 +78,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
           content: '',
           children: [],
           status: 'completed', // History items are completed by default
-          timestamp: Date.now() // We don't have exact timestamp per msg, use current
+          timestamp: Date.now()
         };
         newNodes.set(nodeId, node);
 
@@ -136,23 +136,27 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
 
     let activeConversionId = conversionId;
     
-    // If starting new chat
-    if (!activeConversionId) {
-      activeConversionId = crypto.randomUUID();
-      // Notify parent to update URL/State
-      onConversionCreated(activeConversionId);
-      // Reset view
-      setNodes(new Map());
-      setRootIds([]);
-      setFinalReport(null);
-    }
-
+    // NOTE: For new chats, we send null as conversionId. 
+    // The backend should return the new conversion ID or we infer it if needed.
+    
     setIsSearching(true);
     setError(null);
+    if (!activeConversionId) {
+        // If it's a new chat, we clear previous state to be safe, though useEffect handles this too
+        setNodes(new Map());
+        setRootIds([]);
+        setFinalReport(null);
+    }
     
     try {
       // 1. Start Chat
-      const messageUuid = await fetchCompletion(query, activeConversionId);
+      const { messageUuid, conversionUuid } = await fetchCompletion(query, activeConversionId);
+      
+      // If backend returned a new conversion UUID and we didn't have one, update state
+      if (!activeConversionId && conversionUuid) {
+          activeConversionId = conversionUuid;
+          onConversionCreated(conversionUuid);
+      }
       
       // 2. Start Streaming
       const stream = streamThreading(messageUuid);
@@ -163,6 +167,7 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
 
     } catch (err: any) {
       setError(err.message || '发生未知错误');
+      console.error(err);
     } finally {
       setIsSearching(false);
       setQuery(''); // Clear input after send
@@ -197,8 +202,28 @@ const Visualization: React.FC<Props> = ({ conversionId, onConversionCreated }) =
             }
           }
         } else {
-          setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
+          // Add to roots if no parent, avoiding duplicates
+          if (!rootIds.includes(nodeId)) {
+             // We can't update rootIds state directly here easily inside the map updater, 
+             // but we will sync it via separate state setter if needed or use refs.
+             // Actually, setRootIds check above in the component body handles re-renders, 
+             // but here we are inside a callback. 
+             // Let's defer rootId update or assume React batching helps.
+             // Better approach: We need to update rootIds state.
+             // Since we can't easily set state inside this callback derived from previous state 
+             // without complex merging, let's just push to map and handle rootIds separately 
+             // OR use a mutable ref for rootIds temporarily if performance is key.
+             // However, for React correctness:
+          }
         }
+      }
+      
+      // Logic to ensure rootIds is updated
+      if (!parent_id && !rootIds.includes(nodeId)) {
+          // This is a side effect inside the updateNodes which is not ideal but needed
+          // to trigger the UI update for new roots.
+          // We'll queue this update.
+          setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
       }
 
       // Check for completion signal
