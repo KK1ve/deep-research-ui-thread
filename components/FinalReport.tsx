@@ -18,15 +18,16 @@ export const FinalReport: React.FC<Props> = ({ report }) => {
           <h2 className="text-sm font-bold text-green-100">Final Research Report</h2>
         </div>
         <div className="p-4 md:p-6 text-sm text-slate-200">
-           <ReactMarkdown 
-             remarkPlugins={[remarkGfm]}
-             className="prose prose-invert prose-sm max-w-none prose-a:text-green-400 prose-headings:text-green-100 prose-strong:text-green-200"
-             components={{
-               a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 underline" />,
-             }}
-           >
-             {report}
-           </ReactMarkdown>
+           <div className="prose prose-invert prose-sm max-w-none prose-a:text-green-400 prose-headings:text-green-100 prose-strong:text-green-200">
+               <ReactMarkdown 
+                 remarkPlugins={[remarkGfm]}
+                 components={{
+                   a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 underline" />,
+                 }}
+               >
+                 {report}
+               </ReactMarkdown>
+           </div>
         </div>
         <div className="bg-green-950/30 p-2 text-center text-[10px] text-green-600/60 uppercase tracking-widest font-semibold">
             End of Transmission
