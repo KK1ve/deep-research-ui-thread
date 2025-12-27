@@ -149,19 +149,15 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 {/* 1. Tool Arguments (Input) */}
                 {isToolCall && rawToolArgs && (
                 <div className="flex flex-col gap-1 mb-2 mt-1">
-                    {!isFinalReportTool && (
-                        <>
-                            <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
-                            <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
-                                <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
-                            </div>
-                        </>
-                    )}
+                    <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
+                    <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
+                        <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
+                    </div>
                 </div>
                 )}
 
                 {/* 2. Tool Result (Output) */}
-                {node.toolResult && !isFinalReportTool && (
+                {node.toolResult && (
                 <div className="flex flex-col gap-1 mt-2 animate-in fade-in duration-500">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Output</span>
