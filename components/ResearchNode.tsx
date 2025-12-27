@@ -11,7 +11,8 @@ import {
   Globe, 
   Cpu, 
   AlertCircle,
-  ArrowRightLeft
+  ArrowRightLeft,
+  User
 } from 'lucide-react';
 
 interface Props {
@@ -30,10 +31,25 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const isAgent = node.role === Role.ASSISTANT;
   const isToolCall = node.role === Role.TOOL_CALL;
   const isError = node.role === Role.ERROR;
+  const isHuman = node.role === Role.HUMAN;
 
   // Visual styling based on role
-  const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-orange-500/30' : 'border-slate-700';
-  const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? 'bg-orange-900/10' : 'bg-slate-800/30';
+  let borderColor = 'border-slate-700';
+  let bgColor = 'bg-slate-800/30';
+  let textColor = 'text-slate-300';
+
+  if (isAgent) {
+      borderColor = 'border-purple-500/30';
+      bgColor = 'bg-purple-900/10';
+      textColor = 'text-purple-300';
+  } else if (isToolCall) {
+      borderColor = 'border-orange-500/30';
+      bgColor = 'bg-orange-900/10';
+  } else if (isHuman) {
+      borderColor = 'border-blue-500/30';
+      bgColor = 'bg-blue-900/10';
+      textColor = 'text-blue-300';
+  }
 
   const getIcon = () => {
     if (node.status === 'streaming') return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
@@ -42,6 +58,8 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     switch (node.role) {
       case Role.ASSISTANT:
         return <Bot className="w-4 h-4 text-purple-400" />;
+      case Role.HUMAN:
+        return <User className="w-4 h-4 text-blue-400" />;
       case Role.TOOL_CALL:
         if (node.name?.includes('search')) return <Search className="w-4 h-4 text-orange-400" />;
         if (node.name?.includes('fetch')) return <Globe className="w-4 h-4 text-blue-400" />;
@@ -76,11 +94,12 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const finalReportContent = isFinalReportTool && toolArgs?.report;
 
   return (
-    <div className={`flex flex-col mb-2 animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+    <div className={`flex flex-col mb-2 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isHuman ? 'items-end' : ''}`}>
       <div 
         className={`
           relative flex flex-col rounded-lg border ${borderColor} ${bgColor} 
           transition-all duration-200 overflow-hidden
+          ${isHuman ? 'w-fit max-w-[85%] md:max-w-[70%]' : 'w-full'}
         `}
       >
         {/* Header - Click to collapse/expand */}
@@ -94,13 +113,15 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <span className={`text-sm font-semibold truncate ${isAgent ? 'text-purple-300' : 'text-slate-300'}`}>
-                {node.name || 'Unknown Agent'}
+              <span className={`text-sm font-semibold truncate ${textColor}`}>
+                {isHuman ? 'You' : (node.name || 'Unknown Agent')}
               </span>
-              <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
-                {node.role.replace('_', ' ')}
-              </span>
-              {node.status === 'completed' && !isError && (
+              {!isHuman && (
+                  <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
+                    {node.role.replace('_', ' ')}
+                  </span>
+              )}
+              {node.status === 'completed' && !isError && !isHuman && (
                 <CheckCircle2 className="w-3 h-3 text-green-500/50" />
               )}
             </div>
@@ -118,7 +139,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           <div className="text-sm text-slate-400 flex flex-col">
             
             {/* Primary Content Container */}
-            <div className="px-3 pb-3 pl-[3.25rem]">
+            <div className={`px-3 pb-3 ${hasChildren || isToolCall ? 'pl-[3.25rem]' : 'pl-3'}`}>
                 
                 {/* 1. Tool Arguments (Input) */}
                 {isToolCall && rawToolArgs && (
@@ -154,14 +175,14 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 </div>
                 )}
 
-                {/* 4. Assistant Text Content (Thoughts/Message) */}
+                {/* 4. Text Content */}
                 {(!isToolCall) && node.content && (
                 <div className="whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm mt-1">
                     {node.content}
                 </div>
                 )}
 
-                {/* 5. Thinking Indicator - Only show if incomplete and no result yet */}
+                {/* 5. Thinking Indicator */}
                 {node.status === 'streaming' && !node.toolResult && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                      <Loader2 className="w-3 h-3 animate-spin" />
@@ -172,7 +193,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 )}
             </div>
 
-            {/* 6. Children (Nested Items) - Rendered INSIDE the card now */}
+            {/* 6. Children (Nested Items) */}
             {hasChildren && (
                 <div className="mt-1 border-t border-slate-700/50 bg-slate-900/20 p-2 pl-4 md:pl-6 rounded-b-lg">
                     {node.children.map(childId => (

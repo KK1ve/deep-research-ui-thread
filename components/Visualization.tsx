@@ -44,12 +44,33 @@ const Visualization: React.FC = () => {
 
     setIsSearching(true);
     setError(null);
+    
+    // If starting fresh (no conversion ID), clear everything
     if (!conversionUuid) {
         setFinalReport(null); 
         setRootIds([]);
         setNodes(new Map());
     }
     activeBlockingToolId.current = null;
+
+    // Inject User Node for the current query immediately
+    // Use a temporary ID that won't conflict with backend UUIDs
+    const userMsgId = `human-${Date.now()}`;
+    const userNode: ResearchNodeType = {
+        id: userMsgId,
+        parentId: null,
+        role: Role.HUMAN,
+        name: 'User',
+        content: query,
+        children: [],
+        status: 'completed',
+        timestamp: Date.now()
+    };
+
+    updateNodes((map) => {
+        map.set(userMsgId, userNode);
+    });
+    setRootIds(prev => [...prev, userMsgId]);
 
     try {
       const { messageUuid, conversionUuid: newConversionUuid } = await fetchCompletion(query, conversionUuid);
@@ -111,11 +132,10 @@ const Visualization: React.FC = () => {
           let tempReport: string | null = null;
 
           // Helper to process a completed node from history
-          const processHistoryNode = (displayMsg: any, parentId: string | null) => {
-              const nodeId = displayMsg.id;
-              if (!nodeId) return;
-
-              // Determine if this is a root node logic
+          const processHistoryNode = (displayMsg: any, parentId: string | null, fallbackId: string) => {
+              // Fix: If id is null (common for Human messages), use fallback
+              const nodeId = displayMsg.id || fallbackId;
+              
               // In history, parent_id comes from DB. 
               const effectiveParentId = displayMsg.parent_id || parentId;
 
@@ -125,7 +145,7 @@ const Visualization: React.FC = () => {
                       id: nodeId,
                       parentId: effectiveParentId,
                       role: displayMsg.role,
-                      name: displayMsg.name || 'Unknown',
+                      name: displayMsg.name || (displayMsg.role === Role.HUMAN ? 'User' : 'Unknown'),
                       content: displayMsg.role !== Role.TOOL_CALL && displayMsg.role !== Role.TOOL ? displayMsg.message : '',
                       toolArgs: displayMsg.role === Role.TOOL_CALL ? displayMsg.message : undefined,
                       toolResult: displayMsg.role === Role.TOOL ? displayMsg.message : undefined,
@@ -144,11 +164,7 @@ const Visualization: React.FC = () => {
                       if (!tempRoots.includes(nodeId)) tempRoots.push(nodeId);
                   }
               } else {
-                  // If node exists (e.g. tool call might appear then tool result might reference same ID or be separate)
-                  // In this specific data model, tool result usually has same ID as tool call? 
-                  // Or different ID but parented to it?
-                  // Looking at `DisplayMessage`, unique IDs are likely.
-                  // If we encounter a duplicate ID in the list, we merge.
+                  // Merge content if node exists (e.g. tool output comes later)
                   const node = tempNodes.get(nodeId)!;
                   if (displayMsg.role === Role.TOOL) {
                       node.toolResult = displayMsg.message;
@@ -174,9 +190,12 @@ const Visualization: React.FC = () => {
 
           // Iterate all entities and their content
           for (const entity of entities) {
-              for (const msg of entity.content) {
-                  processHistoryNode(msg, null);
-              }
+              entity.content.forEach((msg, index) => {
+                   // Generate a fallback ID using message_uuid and index
+                   // This ensures missing IDs (like in Human messages) don't break rendering
+                   const fallbackId = `${entity.message_uuid}_${index}`;
+                   processHistoryNode(msg, null, fallbackId);
+              });
           }
 
           setNodes(tempNodes);
