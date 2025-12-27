@@ -1,6 +1,7 @@
-import { ChatDTO, ThreadingDTO, ChunkMessage } from '../types';
+import { ChatDTO, ThreadingDTO, ChunkMessage, PaginationResponse, ConversionVO, MessageEntity } from '../types';
 
 const BASE_URL = 'http://localhost:8000';
+const DEFAULT_USER_ID = 'admin';
 
 /**
  * Initiates the chat.
@@ -11,7 +12,7 @@ const BASE_URL = 'http://localhost:8000';
 export const fetchCompletion = async (prompt: string, conversionUuid: string | null): Promise<{ messageUuid: string; conversionUuid: string }> => {
   const payload: ChatDTO = {
     prompt,
-    user_id: 'admin',
+    user_id: DEFAULT_USER_ID,
     conversion_uuid: conversionUuid,
   };
 
@@ -30,8 +31,6 @@ export const fetchCompletion = async (prompt: string, conversionUuid: string | n
   const data = await response.json();
   
   // Adapt to potential API response structures. 
-  // Assuming data contains message_uuid and conversion_uuid, 
-  // or data.data contains them.
   const messageUuid = data.message_uuid || data.data?.message_uuid || (typeof data.data === 'string' ? data.data : null);
   const newConversionUuid = data.conversion_uuid || data.data?.conversion_uuid;
 
@@ -41,7 +40,7 @@ export const fetchCompletion = async (prompt: string, conversionUuid: string | n
 
   return { 
       messageUuid, 
-      conversionUuid: newConversionUuid || conversionUuid || '' // Fallback to existing or empty if not returned (should ideally be returned)
+      conversionUuid: newConversionUuid || conversionUuid || '' 
   };
 };
 
@@ -82,15 +81,12 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
 
-      // Simple NDJSON parser
       const lines = buffer.split('\n');
-      // Keep the last line in the buffer as it might be incomplete
       buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (line.trim()) {
             try {
-                // Remove any "data: " prefix if using SSE format accidentally mixed in
                 const cleanLine = line.replace(/^data: /, '');
                 const json = JSON.parse(cleanLine);
                 yield json;
@@ -101,7 +97,6 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       }
     }
     
-    // Process remaining buffer
     if (buffer.trim()) {
         try {
             const json = JSON.parse(buffer);
@@ -115,3 +110,52 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
     reader.releaseLock();
   }
 }
+
+/**
+ * Fetches the list of conversations.
+ */
+export const fetchHistory = async (page: number = 1, pageSize: number = 20): Promise<PaginationResponse<ConversionVO>> => {
+  const params = new URLSearchParams({
+    user_id: DEFAULT_USER_ID,
+    page_num: page.toString(),
+    page_size: pageSize.toString()
+  });
+
+  const response = await fetch(`${BASE_URL}/conversion/list?${params.toString()}`);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch history: ${response.statusText}`);
+  }
+  
+  const result = await response.json();
+  return result.data;
+};
+
+/**
+ * Fetches details (messages) for a specific conversation.
+ */
+export const fetchConversationDetail = async (uuid: string): Promise<MessageEntity[]> => {
+  const response = await fetch(`${BASE_URL}/conversion/get/${uuid}`);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch conversation details: ${response.statusText}`);
+  }
+  
+  const result = await response.json();
+  return result.data; // Returns List[MessageEntity]
+};
+
+/**
+ * Deletes a conversation.
+ */
+export const deleteConversation = async (uuid: string): Promise<void> => {
+  const response = await fetch(`${BASE_URL}/conversion/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to delete conversation: ${response.statusText}`);
+  }
+};

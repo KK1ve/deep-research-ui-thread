@@ -45,3 +45,39 @@ export interface ResearchNode {
   status: 'streaming' | 'completed' | 'error';
   timestamp: number;
 }
+
+// --- History / Conversion Types ---
+
+export interface ConversionVO {
+  conversion_uuid: string;
+  title: string;
+  create_time: string;
+  update_time: string;
+  user_id: string;
+}
+
+export interface PaginationResponse<T> {
+  items: T[];
+  total: number;
+  page_num: number;
+  page_size: number;
+  total_pages: number;
+  has_previous: boolean;
+  has_next: boolean;
+}
+
+export interface DisplayMessage {
+  role: Role;
+  name?: string | null;
+  parent_id?: string | null;
+  id?: string | null;
+  message: string;
+}
+
+export interface MessageEntity {
+  message_uuid: string;
+  conversion_uuid: string;
+  content: DisplayMessage[]; 
+  role: string;
+  thread_status?: boolean | null;
+}
