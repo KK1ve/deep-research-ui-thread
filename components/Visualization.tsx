@@ -2,7 +2,6 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { fetchCompletion, streamThreading, fetchConversationDetail } from '../services/api';
 import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage } from '../types';
 import ResearchNode from './ResearchNode';
-import { FinalReport } from './FinalReport';
 import Sidebar from './Sidebar';
 import { Search, Send, Activity, Loader2, MessageSquarePlus, Trash2, Menu, X } from 'lucide-react';
 
@@ -17,7 +16,7 @@ const Visualization: React.FC = () => {
   // State for the visualization tree
   const [nodes, setNodes] = useState<Map<string, ResearchNodeType>>(new Map());
   const [rootIds, setRootIds] = useState<string[]>([]);
-  const [finalReport, setFinalReport] = useState<string | null>(null);
+  // Global finalReport state removed to prevent positioning issues
   
   // Conversation state
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
@@ -47,7 +46,6 @@ const Visualization: React.FC = () => {
     
     // If starting fresh (no conversion ID), clear everything
     if (!conversionUuid) {
-        setFinalReport(null); 
         setRootIds([]);
         setNodes(new Map());
     }
@@ -104,7 +102,6 @@ const Visualization: React.FC = () => {
   const handleNewChat = () => {
       setNodes(new Map());
       setRootIds([]);
-      setFinalReport(null);
       setConversionUuid(null);
       activeBlockingToolId.current = null;
       setQuery('');
@@ -120,7 +117,6 @@ const Visualization: React.FC = () => {
           setConversionUuid(uuid);
           setNodes(new Map());
           setRootIds([]);
-          setFinalReport(null);
           setError(null);
           activeBlockingToolId.current = null;
 
@@ -129,7 +125,6 @@ const Visualization: React.FC = () => {
           // Reconstruct Tree from History
           const tempNodes = new Map<string, ResearchNodeType>();
           const tempRoots: string[] = [];
-          let tempReport: string | null = null;
 
           // Helper to process a completed node from history
           const processHistoryNode = (displayMsg: any, parentId: string | null, fallbackId: string) => {
@@ -174,18 +169,6 @@ const Visualization: React.FC = () => {
                       node.content = displayMsg.message;
                   }
               }
-
-              // Check for report
-              if (displayMsg.role === Role.ASSISTANT && !effectiveParentId && displayMsg.message) {
-                  // Heuristic for final report if it's a long root assistant message at the end?
-                  // Or rely on tool outputs.
-              }
-              if (displayMsg.role === Role.TOOL_CALL && displayMsg.name === 'complete_task') {
-                   try {
-                       const args = JSON.parse(displayMsg.message);
-                       if (args.report) tempReport = args.report;
-                   } catch (e) {}
-              }
           };
 
           // Iterate all entities and their content
@@ -200,7 +183,6 @@ const Visualization: React.FC = () => {
 
           setNodes(tempNodes);
           setRootIds(tempRoots);
-          setFinalReport(tempReport);
 
       } catch (err: any) {
           setError('Failed to load conversation: ' + err.message);
@@ -279,17 +261,6 @@ const Visualization: React.FC = () => {
 
       if (type === MessageType.FINAL) {
         newNode.status = 'completed';
-        
-        if (!newNode.parentId && newNode.role === Role.ASSISTANT && newNode.content) {
-            setFinalReport(newNode.content);
-        }
-        if (newNode.role === Role.TOOL_CALL && newNode.name === 'complete_task') {
-             try {
-                 const cleanJson = (newNode.toolArgs || '').replace(/```json|```/g, '');
-                 const args = JSON.parse(cleanJson);
-                 if (args.report) setFinalReport(args.report);
-             } catch (e) { }
-        }
       }
     });
   };
@@ -303,7 +274,7 @@ const Visualization: React.FC = () => {
         }, 100);
         return () => clearTimeout(timeoutId);
     }
-  }, [nodes, finalReport]);
+  }, [nodes]);
 
   return (
     <div className="flex h-screen w-full bg-background text-slate-200 overflow-hidden relative">
@@ -361,7 +332,7 @@ const Visualization: React.FC = () => {
             className="flex-1 min-h-0 overflow-y-auto px-4 scroll-smooth pb-40" 
             ref={scrollRef}
           >
-              {rootIds.length === 0 && !isSearching && !finalReport && (
+              {rootIds.length === 0 && !isSearching && (
                  <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[40vh]">
                     <Search size={48} strokeWidth={1.5} />
                     <p>Ready to research</p>
@@ -377,12 +348,6 @@ const Visualization: React.FC = () => {
               {isSearching && (activeBlockingToolId.current === null) && (
                  <div className="flex justify-center pt-8 pb-4">
                      <Loader2 className="w-6 h-6 animate-spin text-blue-500/50" />
-                 </div>
-              )}
-
-              {finalReport && (
-                 <div className="max-w-5xl mx-auto pb-10">
-                    <FinalReport report={finalReport} />
                  </div>
               )}
           </div>

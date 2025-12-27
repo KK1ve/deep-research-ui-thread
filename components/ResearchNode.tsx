@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ResearchNode as NodeInterface, Role } from '../types';
+import { FinalReport } from './FinalReport';
 import { 
   Bot, 
   Search, 
@@ -144,26 +145,24 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 {/* 1. Tool Arguments (Input) */}
                 {isToolCall && rawToolArgs && (
                 <div className="flex flex-col gap-1 mb-2 mt-1">
-                    <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
-                    <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
-                        {/* Prefer pretty printed JSON, fall back to raw string if parsing fails (streaming) */}
-                        <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
-                    </div>
+                    {!isFinalReportTool && (
+                        <>
+                            <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
+                            <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
+                                <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
+                            </div>
+                        </>
+                    )}
                 </div>
                 )}
 
-                {/* 2. Special Highlight for Final Report Tool Call */}
+                {/* 2. Special Highlight for Final Report Tool Call - Uses Markdown Renderer */}
                 {finalReportContent && (
-                    <div className="mt-2 p-4 bg-green-900/20 border border-green-500/30 rounded text-green-100 prose prose-invert prose-sm max-w-none">
-                        <div className="font-bold text-green-400 mb-1 flex items-center gap-2">
-                            <FileText size={14}/> Report Generated
-                        </div>
-                        {finalReportContent}
-                    </div>
+                    <FinalReport report={finalReportContent} />
                 )}
 
                 {/* 3. Tool Result (Output) */}
-                {node.toolResult && (
+                {node.toolResult && !isFinalReportTool && (
                 <div className="flex flex-col gap-1 mt-2 animate-in fade-in duration-500">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Output</span>
