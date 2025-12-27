@@ -3,21 +3,20 @@ import { fetchCompletion, streamThreading, fetchConversationDetail } from '../se
 import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage } from '../types';
 import ResearchNode from './ResearchNode';
 import Sidebar from './Sidebar';
-import { Search, Send, Activity, Loader2, MessageSquarePlus, Trash2, Menu, X } from 'lucide-react';
+import { Search, Send, Activity, Loader2, Trash2, Menu, X, Square } from 'lucide-react';
 
 const Visualization: React.FC = () => {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Sidebar State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // Sidebar State - closed by default on mobile (< 768px)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // State for the visualization tree
   const [nodes, setNodes] = useState<Map<string, ResearchNodeType>>(new Map());
   const [rootIds, setRootIds] = useState<string[]>([]);
-  // Global finalReport state removed to prevent positioning issues
   
   // Conversation state
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
@@ -40,17 +39,32 @@ const Visualization: React.FC = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+      setIsSearching(false);
+      
+      // Mark any streaming nodes as cancelled/completed so UI stops spinning
+      updateNodes((map) => {
+        for (const [key, node] of map.entries()) {
+            if (node.status === 'streaming') {
+                map.set(key, { ...node, status: 'completed' }); // Or 'error' if you prefer visual indication
+            }
+        }
+      });
     }
-  }, []);
+  }, [updateNodes]);
 
   // --- Handlers ---
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || isSearching) return;
-
-    // stopGeneration(); // Optional: if we wanted to allow interrupting current search by submitting again (if not blocked)
     
+    // If currently searching, the button acts as a Stop button
+    if (isSearching) {
+        stopGeneration();
+        return;
+    }
+
+    if (!query.trim()) return;
+
     setIsSearching(true);
     setError(null);
     
@@ -65,7 +79,6 @@ const Visualization: React.FC = () => {
     }
 
     // Inject User Node for the current query immediately
-    // Use a temporary ID that won't conflict with backend UUIDs
     const userMsgId = `human-${Date.now()}`;
     const userNode: ResearchNodeType = {
         id: userMsgId,
@@ -99,7 +112,11 @@ const Visualization: React.FC = () => {
       const stream = streamThreading(messageUuid, controller.signal);
 
       for await (const chunk of stream) {
-        processChunk(chunk);
+        try {
+            processChunk(chunk);
+        } catch (chunkError) {
+            console.error("Error processing chunk:", chunkError, chunk);
+        }
       }
 
     } catch (err: any) {
@@ -134,7 +151,6 @@ const Visualization: React.FC = () => {
       setQuery('');
       setError(null);
       setIsSearching(false);
-      // Optional: Refresh history to ensure clean state if needed, mostly UI reset
       setHistoryRefreshKey(prev => prev + 1);
   };
 
@@ -161,10 +177,7 @@ const Visualization: React.FC = () => {
 
           // Helper to process a completed node from history
           const processHistoryNode = (displayMsg: any, parentId: string | null, fallbackId: string) => {
-              // Fix: If id is null (common for Human messages), use fallback
               const nodeId = displayMsg.id || fallbackId;
-              
-              // In history, parent_id comes from DB. 
               const effectiveParentId = displayMsg.parent_id || parentId;
 
               // Create Node
@@ -178,7 +191,7 @@ const Visualization: React.FC = () => {
                       toolArgs: displayMsg.role === Role.TOOL_CALL ? displayMsg.message : undefined,
                       toolResult: displayMsg.role === Role.TOOL ? displayMsg.message : undefined,
                       children: [],
-                      status: displayMsg.role === Role.ERROR ? 'error' : 'completed', // History is always completed
+                      status: displayMsg.role === Role.ERROR ? 'error' : 'completed',
                       timestamp: Date.now()
                   });
 
@@ -188,11 +201,10 @@ const Visualization: React.FC = () => {
                           p.children.push(nodeId);
                       }
                   } else {
-                      // It's a root
                       if (!tempRoots.includes(nodeId)) tempRoots.push(nodeId);
                   }
               } else {
-                  // Merge content if node exists (e.g. tool output comes later)
+                  // Merge content if node exists
                   const node = tempNodes.get(nodeId)!;
                   if (displayMsg.role === Role.TOOL) {
                       node.toolResult = displayMsg.message;
@@ -204,11 +216,8 @@ const Visualization: React.FC = () => {
               }
           };
 
-          // Iterate all entities and their content
           for (const entity of entities) {
               entity.content.forEach((msg, index) => {
-                   // Generate a fallback ID using message_uuid and index
-                   // This ensures missing IDs (like in Human messages) don't break rendering
                    const fallbackId = `${entity.message_uuid}_${index}`;
                    processHistoryNode(msg, null, fallbackId);
               });
@@ -217,21 +226,20 @@ const Visualization: React.FC = () => {
           setNodes(tempNodes);
           setRootIds(tempRoots);
 
-          // Check if the last conversation turn was incomplete (thread_status === false)
+          // Resume incomplete thread if applicable
           const lastEntity = entities[entities.length - 1];
           if (lastEntity && lastEntity.thread_status === false) {
              console.log("Resuming incomplete thread:", lastEntity.message_uuid);
              
-             // Ensure nodes from the last incomplete entity are marked as streaming if appropriate?
-             // Actually, history always returns them. We just need to append new chunks.
-             // We start streaming.
-             
              const stream = streamThreading(lastEntity.message_uuid, controller.signal);
              for await (const chunk of stream) {
-               processChunk(chunk);
+               try {
+                  processChunk(chunk);
+               } catch (chunkError) {
+                   console.error("Error processing chunk in resume:", chunkError);
+               }
              }
              
-             // Refresh history after completion
              setHistoryRefreshKey(prev => prev + 1);
           }
 
@@ -239,7 +247,6 @@ const Visualization: React.FC = () => {
           if (err.name === 'AbortError' || controller.signal.aborted) return;
           setError('Failed to load conversation: ' + err.message);
       } finally {
-          // Cleanup streaming status for any nodes that might have been left hanging
           if (abortControllerRef.current === controller) {
               setIsSearching(false);
               abortControllerRef.current = null;
@@ -258,8 +265,6 @@ const Visualization: React.FC = () => {
   const processChunk = (chunk: ChunkMessage) => {
     const { id, parent_id, role, name, message, type } = chunk;
     const nodeId = id || 'unknown';
-
-    // Removed artificial blocking/flatting logic to support parallel nesting based on parent_id
 
     updateNodes((map) => {
       const existingNode = map.get(nodeId);
@@ -412,10 +417,14 @@ const Visualization: React.FC = () => {
                     />
                     <button 
                     type="submit"
-                    disabled={!query.trim() || isSearching}
-                    className="p-4 hover:bg-slate-800 text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-l border-slate-800"
+                    disabled={!query.trim() && !isSearching}
+                    className={`p-4 transition-colors border-l border-slate-800 ${
+                        isSearching 
+                        ? 'text-red-400 hover:bg-red-500/10 hover:text-red-300' 
+                        : 'text-slate-300 hover:bg-slate-800 disabled:opacity-50'
+                    }`}
                     >
-                    <Send size={18} />
+                    {isSearching ? <Square size={18} fill="currentColor" /> : <Send size={18} />}
                     </button>
                 </div>
                 </form>

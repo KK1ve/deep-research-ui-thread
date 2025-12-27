@@ -1,6 +1,8 @@
 import { ChatDTO, ThreadingDTO, ChunkMessage, PaginationResponse, ConversionVO, MessageEntity } from '../types';
 
-const BASE_URL = 'http://localhost:8000';
+// Use environment variable for API URL with a fallback to localhost
+// Remove trailing slash if present to prevent double slashes in requests
+const BASE_URL = ((import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
 const DEFAULT_USER_ID = 'admin';
 
 /**
