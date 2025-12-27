@@ -23,6 +23,9 @@ const Visualization: React.FC = () => {
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Abort controller to manage cancellation of streams
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Helper to update nodes map immutably
   const updateNodes = useCallback((updater: (map: Map<string, ResearchNodeType>) => void) => {
@@ -33,14 +36,27 @@ const Visualization: React.FC = () => {
     });
   }, []);
 
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
   // --- Handlers ---
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isSearching) return;
 
+    // stopGeneration(); // Optional: if we wanted to allow interrupting current search by submitting again (if not blocked)
+    
     setIsSearching(true);
     setError(null);
+    
+    // Create new controller for this task
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     
     // If starting fresh (no conversion ID), clear everything
     if (!conversionUuid) {
@@ -70,6 +86,8 @@ const Visualization: React.FC = () => {
     try {
       const { messageUuid, conversionUuid: newConversionUuid } = await fetchCompletion(query, conversionUuid);
       
+      if (controller.signal.aborted) return;
+
       if (newConversionUuid) {
           setConversionUuid(newConversionUuid);
       }
@@ -78,28 +96,38 @@ const Visualization: React.FC = () => {
       
       setQuery(''); 
 
-      const stream = streamThreading(messageUuid);
+      const stream = streamThreading(messageUuid, controller.signal);
 
       for await (const chunk of stream) {
         processChunk(chunk);
       }
 
     } catch (err: any) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+          console.log('Search aborted');
+          return;
+      }
       setError(err.message || 'An unknown error occurred');
     } finally {
-      setIsSearching(false);
-      updateNodes((map) => {
-        for (const [key, node] of map.entries()) {
-            if (node.status === 'streaming') {
-                const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
-                map.set(key, { ...node, status: finalStatus });
+      // Only reset state if this is still the active controller
+      if (abortControllerRef.current === controller) {
+        setIsSearching(false);
+        abortControllerRef.current = null;
+        updateNodes((map) => {
+            for (const [key, node] of map.entries()) {
+                if (node.status === 'streaming') {
+                    const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
+                    map.set(key, { ...node, status: finalStatus });
+                }
             }
-        }
-      });
+        });
+      }
     }
   };
 
   const handleNewChat = () => {
+      stopGeneration();
+      
       setNodes(new Map());
       setRootIds([]);
       setConversionUuid(null);
@@ -111,8 +139,11 @@ const Visualization: React.FC = () => {
   };
 
   const handleSelectHistory = async (uuid: string) => {
-      if (isSearching) return; // Prevent switching while generating
+      stopGeneration(); // Abort any ongoing operations
       
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
           setIsSearching(true);
           setConversionUuid(uuid);
@@ -122,6 +153,8 @@ const Visualization: React.FC = () => {
 
           const entities = await fetchConversationDetail(uuid);
           
+          if (controller.signal.aborted) return;
+
           // Reconstruct Tree from History
           const tempNodes = new Map<string, ResearchNodeType>();
           const tempRoots: string[] = [];
@@ -193,7 +226,7 @@ const Visualization: React.FC = () => {
              // Actually, history always returns them. We just need to append new chunks.
              // We start streaming.
              
-             const stream = streamThreading(lastEntity.message_uuid);
+             const stream = streamThreading(lastEntity.message_uuid, controller.signal);
              for await (const chunk of stream) {
                processChunk(chunk);
              }
@@ -203,18 +236,22 @@ const Visualization: React.FC = () => {
           }
 
       } catch (err: any) {
+          if (err.name === 'AbortError' || controller.signal.aborted) return;
           setError('Failed to load conversation: ' + err.message);
       } finally {
-          setIsSearching(false);
           // Cleanup streaming status for any nodes that might have been left hanging
-          updateNodes((map) => {
-            for (const [key, node] of map.entries()) {
-                if (node.status === 'streaming') {
-                    const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
-                    map.set(key, { ...node, status: finalStatus });
+          if (abortControllerRef.current === controller) {
+              setIsSearching(false);
+              abortControllerRef.current = null;
+              updateNodes((map) => {
+                for (const [key, node] of map.entries()) {
+                    if (node.status === 'streaming') {
+                        const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
+                        map.set(key, { ...node, status: finalStatus });
+                    }
                 }
-            }
-          });
+              });
+          }
       }
   };
 

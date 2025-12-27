@@ -47,8 +47,9 @@ export const fetchCompletion = async (prompt: string, conversionUuid: string | n
 /**
  * Connects to the threading endpoint and yields chunks.
  * Explicitly does NOT send conversion_uuid.
+ * Accepts an optional AbortSignal to cancel the stream.
  */
-export async function* streamThreading(messageUuid: string): AsyncGenerator<ChunkMessage, void, unknown> {
+export async function* streamThreading(messageUuid: string, signal?: AbortSignal): AsyncGenerator<ChunkMessage, void, unknown> {
   const payload: ThreadingDTO = {
     message_uuid: messageUuid,
   };
@@ -59,6 +60,7 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) {
