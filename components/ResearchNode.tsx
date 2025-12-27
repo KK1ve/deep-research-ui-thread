@@ -156,12 +156,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 </div>
                 )}
 
-                {/* 2. Special Highlight for Final Report Tool Call - Uses Markdown Renderer */}
-                {finalReportContent && (
-                    <FinalReport report={finalReportContent} />
-                )}
-
-                {/* 3. Tool Result (Output) */}
+                {/* 2. Tool Result (Output) */}
                 {node.toolResult && !isFinalReportTool && (
                 <div className="flex flex-col gap-1 mt-2 animate-in fade-in duration-500">
                     <div className="flex items-center gap-2">
@@ -174,14 +169,14 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 </div>
                 )}
 
-                {/* 4. Text Content */}
+                {/* 3. Text Content */}
                 {(!isToolCall) && node.content && (
                 <div className="whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm mt-1">
                     {node.content}
                 </div>
                 )}
 
-                {/* 5. Thinking Indicator */}
+                {/* 4. Thinking Indicator */}
                 {node.status === 'streaming' && !node.toolResult && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                      <Loader2 className="w-3 h-3 animate-spin" />
@@ -192,7 +187,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 )}
             </div>
 
-            {/* 6. Children (Nested Items) */}
+            {/* 5. Children (Nested Items) */}
             {hasChildren && (
                 <div className="mt-1 border-t border-slate-700/50 bg-slate-900/20 p-2 pl-4 md:pl-6 rounded-b-lg">
                     {node.children.map(childId => (
@@ -208,6 +203,11 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
           </div>
         )}
       </div>
+
+      {/* Final Report moved outside the main card structure */}
+      {finalReportContent && (
+         <FinalReport report={finalReportContent} />
+      )}
     </div>
   );
 };
