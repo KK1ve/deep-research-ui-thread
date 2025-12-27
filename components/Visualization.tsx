@@ -62,6 +62,15 @@ const Visualization: React.FC = () => {
       setError(err.message || 'An unknown error occurred');
     } finally {
       setIsSearching(false);
+      // Safety cleanup: Ensure all streaming nodes are marked as completed when stream ends
+      updateNodes((map) => {
+        // We iterate and update strictly immutably
+        for (const [key, node] of map.entries()) {
+            if (node.status === 'streaming') {
+                map.set(key, { ...node, status: 'completed' });
+            }
+        }
+      });
     }
   };
 
@@ -80,7 +89,6 @@ const Visualization: React.FC = () => {
     const nodeId = id || 'unknown';
 
     // --- Logic to track blocking subagents to nest children inside them ---
-    // If we see a blocking subagent call, we start tracking its ID to reparent subsequent nodes
     if (role === Role.TOOL_CALL && name === 'run_blocking_subagent') {
         activeBlockingToolId.current = nodeId;
     }
@@ -88,31 +96,24 @@ const Visualization: React.FC = () => {
     // Determine Effective Parent ID (Reparenting Logic)
     let effectiveParentId = parent_id;
     
-    // If we have an active blocking tool, and this new node is NOT the tool itself,
-    // we assume it belongs inside the blocking tool context.
-    // Logic: If parent_id matches the blocking tool's parent (siblings), move it inside.
     if (activeBlockingToolId.current && nodeId !== activeBlockingToolId.current) {
-        // Simple heuristic: If it's a new sub-agent or tool appearing while blocking tool is active, nest it.
-        // We compare against the current parent_id. If the stream says it's a child of the Lead Agent,
-        // but the Lead Agent is currently "Blocked" by this tool, we move it inside the tool.
         if (parent_id !== activeBlockingToolId.current) {
              effectiveParentId = activeBlockingToolId.current;
         }
     }
 
-    // Stop tracking when the blocking tool receives its result (closes the block)
     if (role === Role.TOOL && activeBlockingToolId.current === nodeId) {
         activeBlockingToolId.current = null;
     }
     // ---------------------------------------------------------------------
 
     updateNodes((map) => {
-      let node = map.get(nodeId);
+      const existingNode = map.get(nodeId);
+      let newNode: ResearchNodeType;
 
-      // Create Node if it doesn't exist (Handle both NEW and APPEND for creation)
-      // Some streams might send 'append' as the first chunk for tools.
-      if (!node) {
-        const newNode: ResearchNodeType = {
+      // 1. Creation or Clone
+      if (!existingNode) {
+        newNode = {
           id: nodeId,
           parentId: effectiveParentId || null,
           role, // Set initial role
@@ -120,62 +121,58 @@ const Visualization: React.FC = () => {
           content: '',
           children: [],
           status: 'streaming',
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          toolArgs: '',
+          toolResult: ''
         };
         
         map.set(nodeId, newNode);
-        node = newNode;
 
         // Register with Parent or Root
         if (effectiveParentId) {
           const parent = map.get(effectiveParentId);
           if (parent) {
-             // Prevent duplicate children entries
-             if (!parent.children.includes(nodeId)) {
-               parent.children.push(nodeId);
+             // We need to clone the parent too if we modify its children array
+             // to adhere strictly to immutability (essential for preventing race conditions)
+             const newParent = { ...parent, children: [...parent.children] };
+             if (!newParent.children.includes(nodeId)) {
+                newParent.children.push(nodeId);
              }
+             map.set(effectiveParentId, newParent);
           }
         } else {
           setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
         }
+      } else {
+          // IMPORTANT: Create a shallow copy of the node before modifying
+          // This prevents state mutation issues that cause race conditions/interleaved text
+          newNode = { ...existingNode };
+          map.set(nodeId, newNode);
       }
 
-      // --- Apply Updates to Node ---
-      
-      // 1. If this is a TOOL result (Output), we might be updating a TOOL_CALL node
+      // 2. Update Content (on the newNode copy)
       if (role === Role.TOOL) {
-          // Even if the original node was TOOL_CALL, we now attach the result
-          node.toolResult = (node.toolResult || '') + message;
-          
-          // Mark as completed when we start getting results (or if type is final)
-          // Usually receiving the 'tool' role implies the tool has finished executing
-          node.status = 'completed'; 
-          
-          // If the node was initialized as TOOL_CALL, keep that role for icon logic, 
-          // just add the result. If it was initialized as TOOL (rare), that's fine too.
+          newNode.toolResult = (newNode.toolResult || '') + message;
+          newNode.status = 'completed'; 
       } 
-      // 2. If this is a TOOL_CALL (Input args)
       else if (role === Role.TOOL_CALL) {
-          // Accumulate arguments
-          node.toolArgs = (node.toolArgs || '') + message;
+          newNode.toolArgs = (newNode.toolArgs || '') + message;
       } 
-      // 3. Standard Assistant Content
       else {
-          node.content = (node.content || '') + message;
+          newNode.content = (newNode.content || '') + message;
       }
 
-      // --- Handle Final Status ---
+      // 3. Handle Final Status
       if (type === MessageType.FINAL) {
-        node.status = 'completed';
+        newNode.status = 'completed';
         
         // Extract Final Report
-        if (!node.parentId && node.role === Role.ASSISTANT && node.content) {
-            setFinalReport(node.content);
+        if (!newNode.parentId && newNode.role === Role.ASSISTANT && newNode.content) {
+            setFinalReport(newNode.content);
         }
-        if (node.role === Role.TOOL_CALL && node.name === 'complete_task') {
+        if (newNode.role === Role.TOOL_CALL && newNode.name === 'complete_task') {
              try {
-                 // Try to parse partial or full JSON
-                 const cleanJson = (node.toolArgs || '').replace(/```json|```/g, '');
+                 const cleanJson = (newNode.toolArgs || '').replace(/```json|```/g, '');
                  const args = JSON.parse(cleanJson);
                  if (args.report) setFinalReport(args.report);
              } catch (e) { /* ignore parse errors during stream */ }
@@ -187,7 +184,6 @@ const Visualization: React.FC = () => {
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
-        // Small timeout to allow render to update height
         const timeoutId = setTimeout(() => {
             if (scrollRef.current) {
                 scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -198,10 +194,10 @@ const Visualization: React.FC = () => {
   }, [nodes, finalReport]);
 
   return (
-    // MAIN CONTAINER: h-screen ensures it fits the viewport exactly. overflow-hidden prevents body scroll.
+    // MAIN CONTAINER
     <div className="flex flex-col h-screen w-full bg-background text-slate-200 overflow-hidden relative">
       
-      {/* Header - Fixed height */}
+      {/* Header */}
       <div className="flex items-center justify-between p-4 md:px-6 z-20 shrink-0 border-b border-white/5 bg-background/50 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
@@ -228,11 +224,7 @@ const Visualization: React.FC = () => {
           </button>
       </div>
 
-      {/* 
-         SCROLL CONTAINER: 
-         flex-1: takes remaining space.
-         min-h-0: CRITICAL for flexbox nested scrolling. Without this, overflow-y-auto won't work on children sometimes.
-      */}
+      {/* SCROLL CONTAINER */}
       <div 
         className="flex-1 min-h-0 overflow-y-auto px-4 scroll-smooth pb-40" 
         ref={scrollRef}
@@ -263,7 +255,7 @@ const Visualization: React.FC = () => {
           )}
       </div>
 
-      {/* Input Area - Absolute Positioned over the content */}
+      {/* Input Area */}
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background via-background/95 to-transparent z-30 pointer-events-none">
         <div className="max-w-3xl mx-auto pointer-events-auto">
             <form onSubmit={handleSearch} className="relative group">
