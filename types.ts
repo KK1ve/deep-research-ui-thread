@@ -38,9 +38,10 @@ export interface ResearchNode {
   parentId: string | null;
   role: Role;
   name: string;
-  content: string; // Accumulated content
+  content: string; // Accumulated content (Assistant text or Tool Args fallback)
+  toolArgs?: string; // Specific for Tool Call arguments
+  toolResult?: string; // Specific for Tool Output
   children: string[]; // IDs of children
   status: 'streaming' | 'completed' | 'error';
-  args?: Record<string, any>; // For parsed tool call arguments
   timestamp: number;
 }

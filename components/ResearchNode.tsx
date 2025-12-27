@@ -10,7 +10,8 @@ import {
   ChevronRight, 
   Globe, 
   Cpu, 
-  AlertCircle 
+  AlertCircle,
+  ArrowRightLeft
 } from 'lucide-react';
 
 interface Props {
@@ -23,19 +24,12 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const node = nodes.get(nodeId);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Auto-expand mostly, but maybe auto-collapse completed tool calls to reduce noise
-  // useEffect(() => {
-  //   if (node?.role === Role.TOOL && node.status === 'completed') {
-  //      setIsCollapsed(true);
-  //   }
-  // }, [node?.status]);
-
   if (!node) return null;
 
   const hasChildren = node.children.length > 0;
   const isAgent = node.role === Role.ASSISTANT;
   const isToolCall = node.role === Role.TOOL_CALL;
-  const isToolResult = node.role === Role.TOOL;
+  const isToolResult = node.role === Role.TOOL; // Should generally be merged into TOOL_CALL node
   const isError = node.role === Role.ERROR;
 
   // Visual indentation logic
@@ -51,6 +45,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
       case Role.TOOL_CALL:
         if (node.name?.includes('search')) return <Search className="w-4 h-4 text-orange-400" />;
         if (node.name?.includes('fetch')) return <Globe className="w-4 h-4 text-blue-400" />;
+        if (node.name === 'complete_task') return <CheckCircle2 className="w-4 h-4 text-green-400" />;
         return <Cpu className="w-4 h-4 text-orange-400" />;
       case Role.TOOL:
         return <FileText className="w-4 h-4 text-green-400" />;
@@ -64,17 +59,17 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const borderColor = isAgent ? 'border-purple-500/30' : isToolCall ? 'border-orange-500/30' : 'border-slate-700';
   const bgColor = isAgent ? 'bg-purple-900/10' : isToolCall ? 'bg-orange-900/10' : 'bg-slate-800/30';
 
-  // Parse content if it's a tool call to show formatted args
+  // Parse tool args
   const toolArgs = useMemo(() => {
-    if (isToolCall && node.content) {
+    if (isToolCall && node.toolArgs) {
       try {
-        return JSON.parse(node.content);
+        return JSON.parse(node.toolArgs);
       } catch (e) {
         return null;
       }
     }
     return null;
-  }, [isToolCall, node.content]);
+  }, [isToolCall, node.toolArgs]);
 
   // If this is a "complete_task" tool call, it often contains the final answer/report.
   const isFinalReportTool = isToolCall && node.name === 'complete_task';
@@ -132,8 +127,11 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             
             {/* Tool Arguments Visualization */}
             {isToolCall && toolArgs && (
-              <div className="bg-slate-950/50 rounded p-2 mb-2 font-mono text-xs text-orange-200/80 overflow-x-auto">
-                <pre>{JSON.stringify(toolArgs, null, 2)}</pre>
+              <div className="flex flex-col gap-1 mb-2">
+                  <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
+                  <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
+                    <pre>{JSON.stringify(toolArgs, null, 2)}</pre>
+                  </div>
               </div>
             )}
 
@@ -147,15 +145,28 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                  </div>
             )}
 
-            {/* Standard Text Content (if not parsed as tool args or if tool result) */}
-            {(!isToolCall || !toolArgs) && node.content && (
+            {/* Tool Result Visualization (Merged from TOOL role) */}
+            {node.toolResult && (
+               <div className="flex flex-col gap-1 mt-2">
+                  <div className="flex items-center gap-2">
+                     <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Output</span>
+                     <ArrowRightLeft size={10} className="text-slate-600"/>
+                  </div>
+                  <div className="bg-slate-900/50 rounded p-2 font-mono text-xs text-green-200/70 border border-green-500/10 whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
+                     {node.toolResult}
+                  </div>
+               </div>
+            )}
+
+            {/* Standard Text Content (Agent thoughts or fallback) */}
+            {(!isToolCall) && node.content && (
               <div className="whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm">
                 {node.content}
               </div>
             )}
 
             {/* Streaming Indicator if no content yet */}
-            {node.status === 'streaming' && !node.content && (
+            {node.status === 'streaming' && !node.content && !node.toolArgs && (
               <span className="animate-pulse text-slate-600">Thinking...</span>
             )}
           </div>

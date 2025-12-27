@@ -3,13 +3,16 @@ import { ChatDTO, ThreadingDTO, ChunkMessage } from '../types';
 const BASE_URL = 'http://localhost:8000';
 
 /**
- * Initiates the chat to get the message_uuid.
+ * Initiates the chat.
+ * @param prompt The user message.
+ * @param conversionUuid The conversation ID if continuing a chat, or null for a new one.
+ * @returns Object containing messageUuid and the (potentially new) conversionUuid.
  */
-export const fetchCompletion = async (prompt: string): Promise<string> => {
+export const fetchCompletion = async (prompt: string, conversionUuid: string | null): Promise<{ messageUuid: string; conversionUuid: string }> => {
   const payload: ChatDTO = {
     prompt,
     user_id: 'admin',
-    conversion_uuid: crypto.randomUUID(), // Generate a client-side UUID if needed or null
+    conversion_uuid: conversionUuid,
   };
 
   const response = await fetch(`${BASE_URL}/chat/completion`, {
@@ -25,15 +28,26 @@ export const fetchCompletion = async (prompt: string): Promise<string> => {
   }
 
   const data = await response.json();
-  // Assuming the structure based on DefaultResponseVo_MessageVO_
-  // The API likely returns the message_uuid in data.data or similar. 
-  // Based on standard patterns, let's assume data.data is the UUID string or an object containing it.
-  // Adjusting based on typical FastApi implementations:
-  return data.data; 
+  
+  // Adapt to potential API response structures. 
+  // Assuming data contains message_uuid and conversion_uuid, 
+  // or data.data contains them.
+  const messageUuid = data.message_uuid || data.data?.message_uuid || (typeof data.data === 'string' ? data.data : null);
+  const newConversionUuid = data.conversion_uuid || data.data?.conversion_uuid;
+
+  if (!messageUuid) {
+      throw new Error('API response missing message_uuid');
+  }
+
+  return { 
+      messageUuid, 
+      conversionUuid: newConversionUuid || conversionUuid || '' // Fallback to existing or empty if not returned (should ideally be returned)
+  };
 };
 
 /**
  * Connects to the threading endpoint and yields chunks.
+ * Explicitly does NOT send conversion_uuid.
  */
 export async function* streamThreading(messageUuid: string): AsyncGenerator<ChunkMessage, void, unknown> {
   const payload: ThreadingDTO = {
@@ -68,14 +82,6 @@ export async function* streamThreading(messageUuid: string): AsyncGenerator<Chun
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
 
-      // Logic to parse multiple JSON objects from the stream.
-      // Often streams send concatenated JSONs like {}{}.
-      // Or NDJSON (newlines). 
-      // We'll try to split by some delimiter or parse aggressively.
-      
-      // Heuristic: Try to split by `}\n{` or `}{` if compact.
-      // For safety, let's assume NDJSON or standard chunks.
-      
       // Simple NDJSON parser
       const lines = buffer.split('\n');
       // Keep the last line in the buffer as it might be incomplete
