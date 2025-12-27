@@ -3,7 +3,7 @@ import { fetchCompletion, streamThreading } from '../services/api';
 import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage } from '../types';
 import ResearchNode from './ResearchNode';
 import { FinalReport } from './FinalReport';
-import { Search, Send, Activity, Terminal, Loader2, MessageSquarePlus, Trash2 } from 'lucide-react';
+import { Search, Send, Activity, Loader2, MessageSquarePlus, Trash2 } from 'lucide-react';
 
 const Visualization: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -17,6 +17,9 @@ const Visualization: React.FC = () => {
   
   // Conversation state
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
+  
+  // Track logic for nesting sub-agents under run_blocking_subagent
+  const activeBlockingToolId = useRef<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -36,6 +39,7 @@ const Visualization: React.FC = () => {
     setIsSearching(true);
     setError(null);
     setFinalReport(null); 
+    activeBlockingToolId.current = null; // Reset logic tracking
 
     try {
       // 1. Start Chat with current conversion UUID (or null)
@@ -66,15 +70,43 @@ const Visualization: React.FC = () => {
       setRootIds([]);
       setFinalReport(null);
       setConversionUuid(null);
+      activeBlockingToolId.current = null;
       setQuery('');
       setError(null);
   };
 
   const processChunk = (chunk: ChunkMessage) => {
     const { id, parent_id, role, name, message, type } = chunk;
-
-    // We assume 'id' is always present for valid nodes.
     const nodeId = id || 'unknown';
+
+    // 1. Logic to track blocking subagents to nest children inside them
+    if (type === MessageType.NEW || type === MessageType.APPEND) {
+        if (role === Role.TOOL_CALL && name === 'run_blocking_subagent') {
+            activeBlockingToolId.current = nodeId;
+        }
+    }
+
+    // 2. Determine Effective Parent ID (Reparenting Logic)
+    let effectiveParentId = parent_id;
+    
+    // If we have an active blocking tool, and this new node is NOT the tool itself,
+    // and this node's original parent matches the blocking tool's parent (meaning they are siblings),
+    // then we reparent this node to be a child of the blocking tool.
+    if (activeBlockingToolId.current && nodeId !== activeBlockingToolId.current && type === MessageType.NEW) {
+        // We need to check if the declared parent is the same as the blocking tool's parent (sibling relationship)
+        // Since we can't easily access the blocking tool's parent from state synchronously inside this loop without reading state,
+        // we use a heuristic: if the provided parent_id is valid, we assume it's the "Lead Agent".
+        // A safer check: if parent_id is NOT the activeBlockingToolId, we reparent.
+        if (parent_id !== activeBlockingToolId.current) {
+             effectiveParentId = activeBlockingToolId.current;
+        }
+    }
+
+    // 3. Logic to detect when the blocking tool finishes (receives its result)
+    // When the 'tool' result comes for the blocking tool ID, we stop nesting.
+    if (role === Role.TOOL && activeBlockingToolId.current === nodeId) {
+        activeBlockingToolId.current = null;
+    }
 
     updateNodes((map) => {
       // Handle "New" Node
@@ -82,7 +114,7 @@ const Visualization: React.FC = () => {
         if (!map.has(nodeId)) {
           const newNode: ResearchNodeType = {
             id: nodeId,
-            parentId: parent_id || null,
+            parentId: effectiveParentId || null,
             role,
             name: name || 'Unknown',
             content: '',
@@ -91,12 +123,11 @@ const Visualization: React.FC = () => {
             timestamp: Date.now()
           };
           
-          // Initial content assignment based on role
+          // Initial content assignment
           if (role === Role.TOOL_CALL) {
               newNode.toolArgs = message || '';
           } else if (role === Role.TOOL) {
               newNode.toolResult = message || '';
-              // If we receive a TOOL node directly (rare without tool_call, but possible), it's done.
               newNode.status = 'completed';
           } else {
               newNode.content = message || '';
@@ -104,10 +135,10 @@ const Visualization: React.FC = () => {
 
           map.set(nodeId, newNode);
 
-          if (parent_id) {
-            const parent = map.get(parent_id);
+          // Add to parent's children list
+          if (effectiveParentId) {
+            const parent = map.get(effectiveParentId);
             if (parent) {
-              // Avoid duplicates
               if (!parent.children.includes(nodeId)) {
                 parent.children.push(nodeId);
               }
@@ -120,11 +151,10 @@ const Visualization: React.FC = () => {
              // Node exists (e.g. created by tool_call, now receiving tool result)
              const node = map.get(nodeId)!;
              
-             // If we receive a "New" message for an existing node, it might be the transition from Call to Result
+             // Transition from Call to Result
              if (role === Role.TOOL && node.role === Role.TOOL_CALL) {
-                 // Update result and mark as completed
                  node.toolResult = message || '';
-                 node.status = 'completed';
+                 node.status = 'completed'; // Ensure status is updated
              } else {
                  // Fallback update
                  if (message) {
@@ -147,9 +177,7 @@ const Visualization: React.FC = () => {
               node.toolArgs = (node.toolArgs || '') + message;
           } else if (role === Role.TOOL) {
               node.toolResult = (node.toolResult || '') + message;
-              // Don't complete yet, still streaming result
           } else {
-              // For assistant text
               node.content += message;
           }
         }
@@ -160,44 +188,45 @@ const Visualization: React.FC = () => {
         const node = map.get(nodeId);
         if (node) {
           node.status = 'completed';
-          // Append trailing content if any
+          // Append trailing content
           if (message) {
               if (role === Role.TOOL_CALL) node.toolArgs = (node.toolArgs || '') + message;
               else if (role === Role.TOOL) node.toolResult = (node.toolResult || '') + message;
               else node.content += message;
           }
           
-          // Check for Final Report in Assistant content
-          // If the lead agent finishes, it might return the final report in content.
+          // Check for Final Report
           if (!node.parentId && node.role === Role.ASSISTANT && node.content) {
               setFinalReport(node.content);
           }
-          // Or if it's the complete_task tool
           if (node.role === Role.TOOL_CALL && node.name === 'complete_task') {
              try {
                  const args = JSON.parse(node.toolArgs || '{}');
                  if (args.report) setFinalReport(args.report);
-             } catch (e) {
-                 // ignore parse error
-             }
+             } catch (e) { /* ignore */ }
           }
         }
       }
     });
   };
 
-  // Auto-scroll to bottom of tree
+  // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        // Allow a small delay for DOM to paint new heights
+        setTimeout(() => {
+            if (scrollRef.current) {
+                scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+        }, 50);
     }
   }, [nodes, finalReport]);
 
   return (
     <div className="flex flex-col h-full max-w-5xl mx-auto md:px-6 relative">
       
-      {/* Header Area */}
-      <div className="flex items-center justify-between p-4 md:pt-6 z-20">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 md:pt-6 z-20 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
                 <Activity className="text-blue-400 w-5 h-5" />
@@ -223,13 +252,13 @@ const Visualization: React.FC = () => {
           </button>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Content Area - Flexible height with scroll */}
       <div 
         className="flex-1 overflow-y-auto px-4 pb-32 scroll-smooth" 
         ref={scrollRef}
       >
           {rootIds.length === 0 && !isSearching && !finalReport && (
-             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[50vh]">
+             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[40vh]">
                 <Search size={48} strokeWidth={1.5} />
                 <p>Ready to research</p>
              </div>
@@ -241,9 +270,9 @@ const Visualization: React.FC = () => {
             ))}
           </div>
 
-          {isSearching && rootIds.length === 0 && (
-             <div className="flex justify-center pt-12">
-                 <Loader2 className="w-8 h-8 animate-spin text-blue-500/50" />
+          {isSearching && (activeBlockingToolId.current === null) && (
+             <div className="flex justify-center pt-8 pb-4">
+                 <Loader2 className="w-6 h-6 animate-spin text-blue-500/50" />
              </div>
           )}
 
@@ -252,7 +281,7 @@ const Visualization: React.FC = () => {
           )}
       </div>
 
-      {/* Input Area - Floating at bottom */}
+      {/* Input Area */}
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background via-background to-transparent z-30">
         <div className="max-w-3xl mx-auto">
             <form onSubmit={handleSearch} className="relative group">
@@ -279,14 +308,13 @@ const Visualization: React.FC = () => {
             </div>
             </form>
             
-            {/* Disclaimer / Footer */}
             <div className="text-center mt-3 text-[10px] text-slate-600 font-mono">
                 AI Agent Research • {isSearching ? 'Processing...' : 'Ready'}
             </div>
         </div>
       </div>
 
-      {/* Error Display */}
+      {/* Error Toast */}
       {error && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 p-4 bg-red-950/90 border border-red-500/30 rounded-xl text-red-200 flex items-center gap-3 shadow-2xl backdrop-blur-md z-50 animate-in slide-in-from-top-4">
             <Activity className="text-red-500" size={18} />
