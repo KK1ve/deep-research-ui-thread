@@ -9,9 +9,10 @@ interface Props {
   onNewChat: () => void;
   isOpen: boolean;
   onClose: () => void;
+  refreshKey?: number;
 }
 
-const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClose }) => {
+const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClose, refreshKey = 0 }) => {
   const [conversations, setConversations] = useState<ConversionVO[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -40,7 +41,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
     if (isOpen) {
         loadData(1);
     }
-  }, [isOpen]);
+  }, [isOpen, refreshKey]);
 
   const handleDelete = async (e: React.MouseEvent, uuid: string) => {
     e.stopPropagation();

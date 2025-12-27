@@ -12,6 +12,7 @@ const Visualization: React.FC = () => {
   
   // Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // State for the visualization tree
   const [nodes, setNodes] = useState<Map<string, ResearchNodeType>>(new Map());
@@ -20,9 +21,6 @@ const Visualization: React.FC = () => {
   
   // Conversation state
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
-  
-  // Track logic for nesting sub-agents under run_blocking_subagent
-  const activeBlockingToolId = useRef<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +47,6 @@ const Visualization: React.FC = () => {
         setRootIds([]);
         setNodes(new Map());
     }
-    activeBlockingToolId.current = null;
 
     // Inject User Node for the current query immediately
     // Use a temporary ID that won't conflict with backend UUIDs
@@ -76,6 +73,8 @@ const Visualization: React.FC = () => {
       if (newConversionUuid) {
           setConversionUuid(newConversionUuid);
       }
+      // Refresh history list to show updated timestamp or new conversation
+      setHistoryRefreshKey(prev => prev + 1);
       
       setQuery(''); 
 
@@ -104,10 +103,11 @@ const Visualization: React.FC = () => {
       setNodes(new Map());
       setRootIds([]);
       setConversionUuid(null);
-      activeBlockingToolId.current = null;
       setQuery('');
       setError(null);
       setIsSearching(false);
+      // Optional: Refresh history to ensure clean state if needed, mostly UI reset
+      setHistoryRefreshKey(prev => prev + 1);
   };
 
   const handleSelectHistory = async (uuid: string) => {
@@ -119,7 +119,6 @@ const Visualization: React.FC = () => {
           setNodes(new Map());
           setRootIds([]);
           setError(null);
-          activeBlockingToolId.current = null;
 
           const entities = await fetchConversationDetail(uuid);
           
@@ -196,21 +195,7 @@ const Visualization: React.FC = () => {
     const { id, parent_id, role, name, message, type } = chunk;
     const nodeId = id || 'unknown';
 
-    if (role === Role.TOOL_CALL && name === 'run_blocking_subagent') {
-        activeBlockingToolId.current = nodeId;
-    }
-
-    let effectiveParentId = parent_id;
-    
-    if (activeBlockingToolId.current && nodeId !== activeBlockingToolId.current) {
-        if (parent_id !== activeBlockingToolId.current) {
-             effectiveParentId = activeBlockingToolId.current;
-        }
-    }
-
-    if (role === Role.TOOL && activeBlockingToolId.current === nodeId) {
-        activeBlockingToolId.current = null;
-    }
+    // Removed artificial blocking/flatting logic to support parallel nesting based on parent_id
 
     updateNodes((map) => {
       const existingNode = map.get(nodeId);
@@ -219,7 +204,7 @@ const Visualization: React.FC = () => {
       if (!existingNode) {
         newNode = {
           id: nodeId,
-          parentId: effectiveParentId || null,
+          parentId: parent_id || null,
           role, 
           name: name || 'Unknown',
           content: '',
@@ -232,14 +217,14 @@ const Visualization: React.FC = () => {
         
         map.set(nodeId, newNode);
 
-        if (effectiveParentId) {
-          const parent = map.get(effectiveParentId);
+        if (parent_id) {
+          const parent = map.get(parent_id);
           if (parent) {
              const newParent = { ...parent, children: [...parent.children] };
              if (!newParent.children.includes(nodeId)) {
                 newParent.children.push(nodeId);
              }
-             map.set(effectiveParentId, newParent);
+             map.set(parent_id, newParent);
           }
         } else {
           setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
@@ -287,6 +272,7 @@ const Visualization: React.FC = () => {
           activeId={conversionUuid}
           onSelect={handleSelectHistory}
           onNewChat={handleNewChat}
+          refreshKey={historyRefreshKey}
       />
 
       {/* Main Content */}
@@ -336,7 +322,7 @@ const Visualization: React.FC = () => {
                 ))}
               </div>
 
-              {isSearching && (activeBlockingToolId.current === null) && (
+              {isSearching && (
                  <div className="flex justify-center pt-8 pb-4">
                      <Loader2 className="w-6 h-6 animate-spin text-blue-500/50" />
                  </div>
