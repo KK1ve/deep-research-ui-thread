@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ConversionVO, PaginationResponse } from '../types';
-import { fetchHistory, deleteConversation } from '../services/api';
-import { MessageSquare, Trash2, Clock, Loader2, Plus, ChevronLeft } from 'lucide-react';
+import { fetchHistory, deleteConversation, updateConversation } from '../services/api';
+import { MessageSquare, Trash2, Clock, Loader2, Plus, ChevronLeft, Edit2, Check, X } from 'lucide-react';
 
 interface Props {
   activeId: string | null;
@@ -16,6 +16,11 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [hasNext, setHasNext] = useState(false);
+  
+  // Renaming state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const loadData = async (pageNum: number, append: boolean = false) => {
     try {
@@ -35,7 +40,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
     if (isOpen) {
         loadData(1);
     }
-  }, [isOpen]); // Reload when opened to be fresh
+  }, [isOpen]);
 
   const handleDelete = async (e: React.MouseEvent, uuid: string) => {
     e.stopPropagation();
@@ -50,6 +55,39 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
     } catch (err) {
       console.error('Failed to delete', err);
     }
+  };
+
+  const startEditing = (e: React.MouseEvent, conv: ConversionVO) => {
+      e.stopPropagation();
+      setEditingId(conv.conversion_uuid);
+      setEditTitle(conv.title);
+  };
+
+  const cancelEditing = (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      setEditingId(null);
+      setEditTitle('');
+  };
+
+  const saveTitle = async (e: React.MouseEvent | React.FormEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      
+      if (!editingId || !editTitle.trim()) return;
+      
+      try {
+          setIsSaving(true);
+          await updateConversation(editingId, editTitle);
+          setConversations(prev => prev.map(c => 
+             c.conversion_uuid === editingId ? { ...c, title: editTitle } : c
+          ));
+          setEditingId(null);
+      } catch (err) {
+          console.error('Failed to update title', err);
+          alert('Failed to rename conversation');
+      } finally {
+          setIsSaving(false);
+      }
   };
 
   const formatDate = (dateStr: string) => {
@@ -117,8 +155,10 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
                         <div 
                             key={conv.conversion_uuid}
                             onClick={() => {
-                                onSelect(conv.conversion_uuid);
-                                if (window.innerWidth < 768) onClose();
+                                if (editingId !== conv.conversion_uuid) {
+                                    onSelect(conv.conversion_uuid);
+                                    if (window.innerWidth < 768) onClose();
+                                }
                             }}
                             className={`
                                 group relative p-3 rounded-lg cursor-pointer transition-all border border-transparent
@@ -128,22 +168,62 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
                                 }
                             `}
                         >
-                            <div className="pr-6">
-                                <div className="font-medium text-sm truncate mb-1">
-                                    {conv.title || 'Untitled Research'}
-                                </div>
-                                <div className="text-[10px] opacity-60 font-mono">
-                                    {formatDate(conv.create_time)}
-                                </div>
-                            </div>
-                            
-                            <button 
-                                onClick={(e) => handleDelete(e, conv.conversion_uuid)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded opacity-0 group-hover:opacity-100 transition-all"
-                                title="Delete"
-                            >
-                                <Trash2 size={14} />
-                            </button>
+                            {editingId === conv.conversion_uuid ? (
+                                <form onSubmit={saveTitle} className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        value={editTitle}
+                                        onChange={(e) => setEditTitle(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if(e.key === 'Escape') cancelEditing();
+                                        }}
+                                        className="w-full bg-slate-950 border border-blue-500/50 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                                    />
+                                    <button 
+                                        type="submit" 
+                                        className="p-1 text-green-400 hover:bg-green-400/10 rounded"
+                                        disabled={isSaving}
+                                    >
+                                        <Check size={14} />
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={cancelEditing} 
+                                        className="p-1 text-red-400 hover:bg-red-400/10 rounded"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </form>
+                            ) : (
+                                <>
+                                    <div className="pr-12">
+                                        <div className="font-medium text-sm truncate mb-1" title={conv.title}>
+                                            {conv.title || 'Untitled Research'}
+                                        </div>
+                                        <div className="text-[10px] opacity-60 font-mono">
+                                            {formatDate(conv.create_time)}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                            onClick={(e) => startEditing(e, conv)}
+                                            className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-900/20 rounded"
+                                            title="Rename"
+                                        >
+                                            <Edit2 size={13} />
+                                        </button>
+                                        <button 
+                                            onClick={(e) => handleDelete(e, conv.conversion_uuid)}
+                                            className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-950/30 rounded"
+                                            title="Delete"
+                                        >
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ))}
                 </div>

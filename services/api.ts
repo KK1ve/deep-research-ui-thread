@@ -159,3 +159,18 @@ export const deleteConversation = async (uuid: string): Promise<void> => {
     throw new Error(`Failed to delete conversation: ${response.statusText}`);
   }
 };
+
+/**
+ * Updates a conversation (e.g. rename).
+ */
+export const updateConversation = async (uuid: string, title: string): Promise<void> => {
+  const response = await fetch(`${BASE_URL}/conversion/update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uuid, title })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to update conversation: ${response.statusText}`);
+  }
+};

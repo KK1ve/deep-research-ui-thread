@@ -315,16 +315,6 @@ const Visualization: React.FC = () => {
                     </h1>
                 </div>
               </div>
-              
-              <div className="flex items-center gap-2">
-                  <button 
-                    onClick={handleNewChat}
-                    className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
-                    title="New Chat"
-                  >
-                      <MessageSquarePlus size={20} />
-                  </button>
-              </div>
           </div>
 
           {/* Scroll Area */}
