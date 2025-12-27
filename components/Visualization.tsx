@@ -184,10 +184,37 @@ const Visualization: React.FC = () => {
           setNodes(tempNodes);
           setRootIds(tempRoots);
 
+          // Check if the last conversation turn was incomplete (thread_status === false)
+          const lastEntity = entities[entities.length - 1];
+          if (lastEntity && lastEntity.thread_status === false) {
+             console.log("Resuming incomplete thread:", lastEntity.message_uuid);
+             
+             // Ensure nodes from the last incomplete entity are marked as streaming if appropriate?
+             // Actually, history always returns them. We just need to append new chunks.
+             // We start streaming.
+             
+             const stream = streamThreading(lastEntity.message_uuid);
+             for await (const chunk of stream) {
+               processChunk(chunk);
+             }
+             
+             // Refresh history after completion
+             setHistoryRefreshKey(prev => prev + 1);
+          }
+
       } catch (err: any) {
           setError('Failed to load conversation: ' + err.message);
       } finally {
           setIsSearching(false);
+          // Cleanup streaming status for any nodes that might have been left hanging
+          updateNodes((map) => {
+            for (const [key, node] of map.entries()) {
+                if (node.status === 'streaming') {
+                    const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
+                    map.set(key, { ...node, status: finalStatus });
+                }
+            }
+          });
       }
   };
 
