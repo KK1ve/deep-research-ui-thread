@@ -92,7 +92,8 @@ const Visualization: React.FC = () => {
       updateNodes((map) => {
         for (const [key, node] of map.entries()) {
             if (node.status === 'streaming') {
-                map.set(key, { ...node, status: 'completed' });
+                const finalStatus = node.role === Role.ERROR ? 'error' : 'completed';
+                map.set(key, { ...node, status: finalStatus });
             }
         }
       });
@@ -145,7 +146,7 @@ const Visualization: React.FC = () => {
                       toolArgs: displayMsg.role === Role.TOOL_CALL ? displayMsg.message : undefined,
                       toolResult: displayMsg.role === Role.TOOL ? displayMsg.message : undefined,
                       children: [],
-                      status: 'completed', // History is always completed
+                      status: displayMsg.role === Role.ERROR ? 'error' : 'completed', // History is always completed
                       timestamp: Date.now()
                   });
 
@@ -260,7 +261,7 @@ const Visualization: React.FC = () => {
       }
 
       if (type === MessageType.FINAL) {
-        newNode.status = 'completed';
+        newNode.status = role === Role.ERROR ? 'error' : 'completed';
       }
     });
   };

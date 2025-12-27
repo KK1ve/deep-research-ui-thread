@@ -50,11 +50,15 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
       borderColor = 'border-blue-500/30';
       bgColor = 'bg-blue-900/10';
       textColor = 'text-blue-300';
+  } else if (isError) {
+      borderColor = 'border-red-500/30';
+      bgColor = 'bg-red-900/10';
+      textColor = 'text-red-300';
   }
 
   const getIcon = () => {
     if (node.status === 'streaming') return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
-    if (isError) return <AlertCircle className="w-4 h-4 text-red-500" />;
+    if (isError || node.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500" />;
     
     switch (node.role) {
       case Role.ASSISTANT:
@@ -171,7 +175,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
 
                 {/* 3. Text Content */}
                 {(!isToolCall) && node.content && (
-                <div className="whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm mt-1">
+                <div className={`whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm mt-1 ${isError ? 'text-red-400' : ''}`}>
                     {node.content}
                 </div>
                 )}
