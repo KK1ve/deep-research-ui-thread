@@ -3,7 +3,7 @@ import { fetchCompletion, streamThreading } from '../services/api';
 import { ResearchNode as ResearchNodeType, Role, MessageType, ChunkMessage } from '../types';
 import ResearchNode from './ResearchNode';
 import { FinalReport } from './FinalReport';
-import { Search, Send, Activity, Terminal, Loader2, MessageSquarePlus } from 'lucide-react';
+import { Search, Send, Activity, Terminal, Loader2, MessageSquarePlus, Trash2 } from 'lucide-react';
 
 const Visualization: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -35,11 +35,7 @@ const Visualization: React.FC = () => {
 
     setIsSearching(true);
     setError(null);
-    setFinalReport(null); // Clear previous final report only, keep history nodes?
-    // If it's a new conversation (conversionUuid is null), we might want to clear nodes?
-    // The requirement says "One conversion has multiple messages".
-    // If user manually refreshes or hits a "New Chat" button, we clear. 
-    // Here we assume sequential chat.
+    setFinalReport(null); 
 
     try {
       // 1. Start Chat with current conversion UUID (or null)
@@ -100,6 +96,8 @@ const Visualization: React.FC = () => {
               newNode.toolArgs = message || '';
           } else if (role === Role.TOOL) {
               newNode.toolResult = message || '';
+              // If we receive a TOOL node directly (rare without tool_call, but possible), it's done.
+              newNode.status = 'completed';
           } else {
               newNode.content = message || '';
           }
@@ -119,19 +117,22 @@ const Visualization: React.FC = () => {
             setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
           }
         } else {
-             // Node exists (e.g. created by tool_call, now receiving tool result, OR duplicated 'new')
-             // However, usually tool results come with role='tool' but same ID as tool_call
+             // Node exists (e.g. created by tool_call, now receiving tool result)
              const node = map.get(nodeId)!;
              
              // If we receive a "New" message for an existing node, it might be the transition from Call to Result
              if (role === Role.TOOL && node.role === Role.TOOL_CALL) {
-                 // Do not change the main role, just add result
+                 // Update result and mark as completed
                  node.toolResult = message || '';
+                 node.status = 'completed';
              } else {
                  // Fallback update
                  if (message) {
                     if (role === Role.TOOL_CALL) node.toolArgs = message;
-                    else if (role === Role.TOOL) node.toolResult = message;
+                    else if (role === Role.TOOL) {
+                        node.toolResult = message;
+                        node.status = 'completed';
+                    }
                     else node.content = message;
                  }
              }
@@ -146,6 +147,7 @@ const Visualization: React.FC = () => {
               node.toolArgs = (node.toolArgs || '') + message;
           } else if (role === Role.TOOL) {
               node.toolResult = (node.toolResult || '') + message;
+              // Don't complete yet, still streaming result
           } else {
               // For assistant text
               node.content += message;
@@ -192,99 +194,104 @@ const Visualization: React.FC = () => {
   }, [nodes, finalReport]);
 
   return (
-    <div className="flex flex-col h-full max-w-6xl mx-auto p-4 md:p-6 gap-6">
+    <div className="flex flex-col h-full max-w-5xl mx-auto md:px-6 relative">
       
       {/* Header Area */}
-      <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 flex items-center gap-3">
-              <Activity className="text-blue-400" />
-              Deep Research Agent
-            </h1>
-            <p className="text-slate-400 text-sm md:text-base hidden md:block">
-              Collaborative multi-agent research visualization
-            </p>
+      <div className="flex items-center justify-between p-4 md:pt-6 z-20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                <Activity className="text-blue-400 w-5 h-5" />
+            </div>
+            <div>
+                <h1 className="text-xl font-bold text-slate-100 tracking-tight">
+                Deep Research Agent
+                </h1>
+                {conversionUuid && (
+                    <span className="text-xs text-slate-500 font-mono">
+                        ID: {conversionUuid.slice(0, 8)}
+                    </span>
+                )}
+            </div>
           </div>
           
           <button 
             onClick={handleNewChat}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-sm text-slate-300 transition-colors"
+            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
+            title="New Chat"
           >
-              <MessageSquarePlus size={16} />
-              New Chat
+              <MessageSquarePlus size={20} />
           </button>
       </div>
 
-      {/* Main Visualization Area */}
-      <div className="flex-1 overflow-hidden relative rounded-xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm flex flex-col shadow-2xl">
-        <div className="bg-slate-950/80 p-3 border-b border-slate-800 flex items-center justify-between sticky top-0 z-20">
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                <Terminal size={14} />
-                <span>LIVE EXECUTION LOG {conversionUuid ? `[ID: ${conversionUuid.slice(0,8)}...]` : ''}</span>
-            </div>
-            {isSearching && (
-                 <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-            )}
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4 scroll-smooth" ref={scrollRef}>
+      {/* Main Content Area */}
+      <div 
+        className="flex-1 overflow-y-auto px-4 pb-32 scroll-smooth" 
+        ref={scrollRef}
+      >
           {rootIds.length === 0 && !isSearching && !finalReport && (
-             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50">
-                <Search size={64} strokeWidth={1} />
+             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[50vh]">
+                <Search size={48} strokeWidth={1.5} />
                 <p>Ready to research</p>
              </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
             {rootIds.map(rootId => (
                 <ResearchNode key={rootId} nodeId={rootId} nodes={nodes} />
             ))}
           </div>
 
+          {isSearching && rootIds.length === 0 && (
+             <div className="flex justify-center pt-12">
+                 <Loader2 className="w-8 h-8 animate-spin text-blue-500/50" />
+             </div>
+          )}
+
           {finalReport && (
              <FinalReport report={finalReport} />
           )}
-
-          {/* Padding at bottom */}
-          <div className="h-12"></div>
-        </div>
       </div>
 
-      {/* Input Area */}
-      <div className="relative z-10 w-full max-w-4xl mx-auto">
-        <form onSubmit={handleSearch} className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-50 transition duration-500"></div>
-          <div className="relative flex items-center bg-surface border border-slate-700 rounded-xl shadow-xl overflow-hidden">
-             <div className="pl-4 text-slate-500">
-               {isSearching ? <Loader2 className="animate-spin" /> : <Search />}
-             </div>
-             <input 
-                type="text" 
-                className="w-full bg-transparent p-4 text-slate-100 placeholder-slate-500 focus:outline-none"
-                placeholder={conversionUuid ? "Ask a follow-up question..." : "What do you want to research today?"}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                disabled={isSearching}
-             />
-             <button 
-               type="submit"
-               disabled={!query.trim() || isSearching}
-               className="p-4 bg-slate-800 hover:bg-slate-700 text-slate-200 border-l border-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-             >
-               <Send size={20} />
-             </button>
-          </div>
-        </form>
+      {/* Input Area - Floating at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background via-background to-transparent z-30">
+        <div className="max-w-3xl mx-auto">
+            <form onSubmit={handleSearch} className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition duration-500"></div>
+            <div className="relative flex items-center bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 focus-within:ring-blue-500/50 transition-all">
+                <div className="pl-4 text-slate-500">
+                {isSearching ? <Loader2 className="animate-spin w-5 h-5" /> : <Search className="w-5 h-5" />}
+                </div>
+                <input 
+                    type="text" 
+                    className="w-full bg-transparent p-4 text-slate-100 placeholder-slate-500 focus:outline-none"
+                    placeholder={conversionUuid ? "Ask a follow-up question..." : "What do you want to research today?"}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    disabled={isSearching}
+                />
+                <button 
+                type="submit"
+                disabled={!query.trim() || isSearching}
+                className="p-4 hover:bg-slate-800 text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed border-l border-slate-800"
+                >
+                <Send size={18} />
+                </button>
+            </div>
+            </form>
+            
+            {/* Disclaimer / Footer */}
+            <div className="text-center mt-3 text-[10px] text-slate-600 font-mono">
+                AI Agent Research • {isSearching ? 'Processing...' : 'Ready'}
+            </div>
+        </div>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 p-4 bg-red-900/90 border border-red-500/50 rounded-lg text-red-200 flex items-center gap-3 shadow-xl backdrop-blur-md z-50">
-            <Activity className="text-red-500" />
-            {error}
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 p-4 bg-red-950/90 border border-red-500/30 rounded-xl text-red-200 flex items-center gap-3 shadow-2xl backdrop-blur-md z-50 animate-in slide-in-from-top-4">
+            <Activity className="text-red-500" size={18} />
+            <span className="text-sm font-medium">{error}</span>
+            <button onClick={() => setError(null)} className="ml-2 hover:text-white"><Trash2 size={14}/></button>
         </div>
       )}
     </div>
