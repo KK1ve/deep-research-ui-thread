@@ -56,20 +56,24 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     }
   };
 
-  // Parse tool args safely
+  // Safe JSON parse that handles streaming partial JSON
   const toolArgs = useMemo(() => {
     if (isToolCall && node.toolArgs) {
       try {
         return JSON.parse(node.toolArgs);
       } catch (e) {
+        // Return null for invalid JSON so we can render raw string fallback
         return null;
       }
     }
     return null;
   }, [isToolCall, node.toolArgs]);
 
+  const rawToolArgs = node.toolArgs || '';
+
   // If this is a "complete_task" tool call, it often contains the final answer/report.
   const isFinalReportTool = isToolCall && node.name === 'complete_task';
+  const finalReportContent = isFinalReportTool && toolArgs?.report;
 
   return (
     <div className={`flex flex-col mb-2 animate-in fade-in slide-in-from-bottom-2 duration-300`}>
@@ -117,28 +121,29 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
             <div className="px-3 pb-3 pl-[3.25rem]">
                 
                 {/* 1. Tool Arguments (Input) */}
-                {isToolCall && toolArgs && (
+                {isToolCall && rawToolArgs && (
                 <div className="flex flex-col gap-1 mb-2 mt-1">
                     <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
                     <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
-                        <pre>{JSON.stringify(toolArgs, null, 2)}</pre>
+                        {/* Prefer pretty printed JSON, fall back to raw string if parsing fails (streaming) */}
+                        <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
                     </div>
                 </div>
                 )}
 
                 {/* 2. Special Highlight for Final Report Tool Call */}
-                {isFinalReportTool && toolArgs?.report && (
+                {finalReportContent && (
                     <div className="mt-2 p-4 bg-green-900/20 border border-green-500/30 rounded text-green-100 prose prose-invert prose-sm max-w-none">
                         <div className="font-bold text-green-400 mb-1 flex items-center gap-2">
                             <FileText size={14}/> Report Generated
                         </div>
-                        {toolArgs.report}
+                        {finalReportContent}
                     </div>
                 )}
 
                 {/* 3. Tool Result (Output) */}
                 {node.toolResult && (
-                <div className="flex flex-col gap-1 mt-2">
+                <div className="flex flex-col gap-1 mt-2 animate-in fade-in duration-500">
                     <div className="flex items-center gap-2">
                         <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Output</span>
                         <ArrowRightLeft size={10} className="text-slate-600"/>
@@ -156,9 +161,14 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 </div>
                 )}
 
-                {/* 5. Thinking Indicator */}
-                {node.status === 'streaming' && !node.content && !node.toolArgs && !node.toolResult && (
-                <span className="animate-pulse text-slate-600 italic">Thinking...</span>
+                {/* 5. Thinking Indicator - Only show if incomplete and no result yet */}
+                {node.status === 'streaming' && !node.toolResult && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                     <Loader2 className="w-3 h-3 animate-spin" />
+                     <span className="italic">
+                        {isToolCall ? 'Executing tool...' : 'Thinking...'}
+                     </span>
+                  </div>
                 )}
             </div>
 

@@ -79,132 +79,106 @@ const Visualization: React.FC = () => {
     const { id, parent_id, role, name, message, type } = chunk;
     const nodeId = id || 'unknown';
 
-    // 1. Logic to track blocking subagents to nest children inside them
-    if (type === MessageType.NEW || type === MessageType.APPEND) {
-        if (role === Role.TOOL_CALL && name === 'run_blocking_subagent') {
-            activeBlockingToolId.current = nodeId;
-        }
+    // --- Logic to track blocking subagents to nest children inside them ---
+    // If we see a blocking subagent call, we start tracking its ID to reparent subsequent nodes
+    if (role === Role.TOOL_CALL && name === 'run_blocking_subagent') {
+        activeBlockingToolId.current = nodeId;
     }
 
-    // 2. Determine Effective Parent ID (Reparenting Logic)
+    // Determine Effective Parent ID (Reparenting Logic)
     let effectiveParentId = parent_id;
     
     // If we have an active blocking tool, and this new node is NOT the tool itself,
-    // and this node's original parent matches the blocking tool's parent (meaning they are siblings),
-    // then we reparent this node to be a child of the blocking tool.
-    if (activeBlockingToolId.current && nodeId !== activeBlockingToolId.current && type === MessageType.NEW) {
-        // We need to check if the declared parent is the same as the blocking tool's parent (sibling relationship)
-        // Since we can't easily access the blocking tool's parent from state synchronously inside this loop without reading state,
-        // we use a heuristic: if the provided parent_id is valid, we assume it's the "Lead Agent".
-        // A safer check: if parent_id is NOT the activeBlockingToolId, we reparent.
+    // we assume it belongs inside the blocking tool context.
+    // Logic: If parent_id matches the blocking tool's parent (siblings), move it inside.
+    if (activeBlockingToolId.current && nodeId !== activeBlockingToolId.current) {
+        // Simple heuristic: If it's a new sub-agent or tool appearing while blocking tool is active, nest it.
+        // We compare against the current parent_id. If the stream says it's a child of the Lead Agent,
+        // but the Lead Agent is currently "Blocked" by this tool, we move it inside the tool.
         if (parent_id !== activeBlockingToolId.current) {
              effectiveParentId = activeBlockingToolId.current;
         }
     }
 
-    // 3. Logic to detect when the blocking tool finishes (receives its result)
-    // When the 'tool' result comes for the blocking tool ID, we stop nesting.
+    // Stop tracking when the blocking tool receives its result (closes the block)
     if (role === Role.TOOL && activeBlockingToolId.current === nodeId) {
         activeBlockingToolId.current = null;
     }
+    // ---------------------------------------------------------------------
 
     updateNodes((map) => {
-      // Handle "New" Node
-      if (type === MessageType.NEW) {
-        if (!map.has(nodeId)) {
-          const newNode: ResearchNodeType = {
-            id: nodeId,
-            parentId: effectiveParentId || null,
-            role,
-            name: name || 'Unknown',
-            content: '',
-            children: [],
-            status: 'streaming',
-            timestamp: Date.now()
-          };
-          
-          // Initial content assignment
-          if (role === Role.TOOL_CALL) {
-              newNode.toolArgs = message || '';
-          } else if (role === Role.TOOL) {
-              newNode.toolResult = message || '';
-              newNode.status = 'completed';
-          } else {
-              newNode.content = message || '';
-          }
+      let node = map.get(nodeId);
 
-          map.set(nodeId, newNode);
+      // Create Node if it doesn't exist (Handle both NEW and APPEND for creation)
+      // Some streams might send 'append' as the first chunk for tools.
+      if (!node) {
+        const newNode: ResearchNodeType = {
+          id: nodeId,
+          parentId: effectiveParentId || null,
+          role, // Set initial role
+          name: name || 'Unknown',
+          content: '',
+          children: [],
+          status: 'streaming',
+          timestamp: Date.now()
+        };
+        
+        map.set(nodeId, newNode);
+        node = newNode;
 
-          // Add to parent's children list
-          if (effectiveParentId) {
-            const parent = map.get(effectiveParentId);
-            if (parent) {
-              if (!parent.children.includes(nodeId)) {
-                parent.children.push(nodeId);
-              }
-            }
-          } else {
-            // Is a root node
-            setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
+        // Register with Parent or Root
+        if (effectiveParentId) {
+          const parent = map.get(effectiveParentId);
+          if (parent) {
+             // Prevent duplicate children entries
+             if (!parent.children.includes(nodeId)) {
+               parent.children.push(nodeId);
+             }
           }
         } else {
-             // Node exists (e.g. created by tool_call, now receiving tool result)
-             const node = map.get(nodeId)!;
-             
-             // Transition from Call to Result
-             if (role === Role.TOOL && node.role === Role.TOOL_CALL) {
-                 node.toolResult = message || '';
-                 node.status = 'completed'; // Ensure status is updated
-             } else {
-                 // Fallback update
-                 if (message) {
-                    if (role === Role.TOOL_CALL) node.toolArgs = message;
-                    else if (role === Role.TOOL) {
-                        node.toolResult = message;
-                        node.status = 'completed';
-                    }
-                    else node.content = message;
-                 }
-             }
-        }
-      } 
-      
-      // Handle "Append"
-      else if (type === MessageType.APPEND) {
-        const node = map.get(nodeId);
-        if (node) {
-          if (role === Role.TOOL_CALL) {
-              node.toolArgs = (node.toolArgs || '') + message;
-          } else if (role === Role.TOOL) {
-              node.toolResult = (node.toolResult || '') + message;
-          } else {
-              node.content += message;
-          }
+          setRootIds(prev => prev.includes(nodeId) ? prev : [...prev, nodeId]);
         }
       }
 
-      // Handle "Final"
-      else if (type === MessageType.FINAL) {
-        const node = map.get(nodeId);
-        if (node) {
-          node.status = 'completed';
-          // Append trailing content
-          if (message) {
-              if (role === Role.TOOL_CALL) node.toolArgs = (node.toolArgs || '') + message;
-              else if (role === Role.TOOL) node.toolResult = (node.toolResult || '') + message;
-              else node.content += message;
-          }
+      // --- Apply Updates to Node ---
+      
+      // 1. If this is a TOOL result (Output), we might be updating a TOOL_CALL node
+      if (role === Role.TOOL) {
+          // Even if the original node was TOOL_CALL, we now attach the result
+          node.toolResult = (node.toolResult || '') + message;
           
-          // Check for Final Report
-          if (!node.parentId && node.role === Role.ASSISTANT && node.content) {
-              setFinalReport(node.content);
-          }
-          if (node.role === Role.TOOL_CALL && node.name === 'complete_task') {
+          // Mark as completed when we start getting results (or if type is final)
+          // Usually receiving the 'tool' role implies the tool has finished executing
+          node.status = 'completed'; 
+          
+          // If the node was initialized as TOOL_CALL, keep that role for icon logic, 
+          // just add the result. If it was initialized as TOOL (rare), that's fine too.
+      } 
+      // 2. If this is a TOOL_CALL (Input args)
+      else if (role === Role.TOOL_CALL) {
+          // Accumulate arguments
+          node.toolArgs = (node.toolArgs || '') + message;
+      } 
+      // 3. Standard Assistant Content
+      else {
+          node.content = (node.content || '') + message;
+      }
+
+      // --- Handle Final Status ---
+      if (type === MessageType.FINAL) {
+        node.status = 'completed';
+        
+        // Extract Final Report
+        if (!node.parentId && node.role === Role.ASSISTANT && node.content) {
+            setFinalReport(node.content);
+        }
+        if (node.role === Role.TOOL_CALL && node.name === 'complete_task') {
              try {
-                 const args = JSON.parse(node.toolArgs || '{}');
+                 // Try to parse partial or full JSON
+                 const cleanJson = (node.toolArgs || '').replace(/```json|```/g, '');
+                 const args = JSON.parse(cleanJson);
                  if (args.report) setFinalReport(args.report);
-             } catch (e) { /* ignore */ }
-          }
+             } catch (e) { /* ignore parse errors during stream */ }
         }
       }
     });
@@ -213,30 +187,32 @@ const Visualization: React.FC = () => {
   // Auto-scroll
   useEffect(() => {
     if (scrollRef.current) {
-        // Allow a small delay for DOM to paint new heights
-        setTimeout(() => {
+        // Small timeout to allow render to update height
+        const timeoutId = setTimeout(() => {
             if (scrollRef.current) {
                 scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
             }
-        }, 50);
+        }, 100);
+        return () => clearTimeout(timeoutId);
     }
   }, [nodes, finalReport]);
 
   return (
-    <div className="flex flex-col h-full max-w-5xl mx-auto md:px-6 relative">
+    // MAIN CONTAINER: h-screen ensures it fits the viewport exactly. overflow-hidden prevents body scroll.
+    <div className="flex flex-col h-screen w-full bg-background text-slate-200 overflow-hidden relative">
       
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 md:pt-6 z-20 shrink-0">
+      {/* Header - Fixed height */}
+      <div className="flex items-center justify-between p-4 md:px-6 z-20 shrink-0 border-b border-white/5 bg-background/50 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
                 <Activity className="text-blue-400 w-5 h-5" />
             </div>
             <div>
-                <h1 className="text-xl font-bold text-slate-100 tracking-tight">
+                <h1 className="text-lg md:text-xl font-bold text-slate-100 tracking-tight">
                 Deep Research Agent
                 </h1>
                 {conversionUuid && (
-                    <span className="text-xs text-slate-500 font-mono">
+                    <span className="text-[10px] md:text-xs text-slate-500 font-mono block">
                         ID: {conversionUuid.slice(0, 8)}
                     </span>
                 )}
@@ -252,9 +228,13 @@ const Visualization: React.FC = () => {
           </button>
       </div>
 
-      {/* Main Content Area - Flexible height with scroll */}
+      {/* 
+         SCROLL CONTAINER: 
+         flex-1: takes remaining space.
+         min-h-0: CRITICAL for flexbox nested scrolling. Without this, overflow-y-auto won't work on children sometimes.
+      */}
       <div 
-        className="flex-1 overflow-y-auto px-4 pb-32 scroll-smooth" 
+        className="flex-1 min-h-0 overflow-y-auto px-4 scroll-smooth pb-40" 
         ref={scrollRef}
       >
           {rootIds.length === 0 && !isSearching && !finalReport && (
@@ -264,7 +244,7 @@ const Visualization: React.FC = () => {
              </div>
           )}
 
-          <div className="space-y-4 pt-2">
+          <div className="space-y-4 pt-4 max-w-5xl mx-auto">
             {rootIds.map(rootId => (
                 <ResearchNode key={rootId} nodeId={rootId} nodes={nodes} />
             ))}
@@ -277,13 +257,15 @@ const Visualization: React.FC = () => {
           )}
 
           {finalReport && (
-             <FinalReport report={finalReport} />
+             <div className="max-w-5xl mx-auto pb-10">
+                <FinalReport report={finalReport} />
+             </div>
           )}
       </div>
 
-      {/* Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background via-background to-transparent z-30">
-        <div className="max-w-3xl mx-auto">
+      {/* Input Area - Absolute Positioned over the content */}
+      <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-background via-background/95 to-transparent z-30 pointer-events-none">
+        <div className="max-w-3xl mx-auto pointer-events-auto">
             <form onSubmit={handleSearch} className="relative group">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition duration-500"></div>
             <div className="relative flex items-center bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 focus-within:ring-blue-500/50 transition-all">
