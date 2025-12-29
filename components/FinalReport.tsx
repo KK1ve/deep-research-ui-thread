@@ -19,12 +19,24 @@ interface Props {
 export const FinalReport: React.FC<Props> = ({ report }) => {
   const processedContent = useMemo(() => {
     if (!report) return '';
+    
+    let content = report;
+
+    // Pattern 1: <source: http://example.com>
     // Replace <source: url> patterns with Markdown links
-    // Example: <source: https://google.com> -> [[Source]](https://google.com)
-    return report.replace(/<source:\s*([^>]+)>/gi, (_, url) => {
+    content = content.replace(/<source:\s*([^>]+)>/gi, (_, url) => {
       const cleanUrl = url.trim();
       return ` [[Source]](${cleanUrl})`;
     });
+
+    // Pattern 2: <source>http://example.com</source>
+    // Replace standard XML-like source tags
+    content = content.replace(/<source>(.*?)<\/source>/gi, (_, url) => {
+      const cleanUrl = url.trim();
+      return ` [[Source]](${cleanUrl})`;
+    });
+
+    return content;
   }, [report]);
 
   if (!report) return null;
