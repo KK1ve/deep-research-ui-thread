@@ -336,7 +336,7 @@ const Visualization: React.FC = () => {
       }
 
       // STRICT CHECK: Only mark as final if message type is strictly 'final'
-      if (type === MessageType.FINAL || type === 'final') {
+      if (type === MessageType.FINAL) {
         newNode.status = role === Role.ERROR ? 'error' : 'completed';
         newNode.isFinal = true;
       }

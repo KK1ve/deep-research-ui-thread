@@ -9,6 +9,9 @@ const plugins = [
   highlight(),
 ];
 
+// Workaround for type definition mismatch in @bytemd/react
+const MarkdownViewer = Viewer as any;
+
 interface Props {
   report: string;
 }
@@ -36,7 +39,7 @@ export const FinalReport: React.FC<Props> = ({ report }) => {
         <div className="p-4 md:p-6 text-sm text-slate-200">
            {/* ByteMD Viewer renders with .markdown-body class. Styles are overridden in index.html */}
            <div className="w-full break-words">
-               <Viewer value={processedContent} plugins={plugins} />
+               <MarkdownViewer value={processedContent} plugins={plugins} />
            </div>
         </div>
         <div className="bg-green-950/30 p-2 text-center text-[10px] text-green-600/60 uppercase tracking-widest font-semibold">
