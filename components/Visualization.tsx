@@ -23,6 +23,7 @@ const Visualization: React.FC = () => {
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   
   // Abort controller to manage cancellation of streams
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -60,6 +61,14 @@ const Visualization: React.FC = () => {
     const isAtBottom = scrollHeight - scrollTop - clientHeight <= 50;
     shouldAutoScrollRef.current = isAtBottom;
   }, []);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [query]);
 
   // --- Handlers ---
 
@@ -150,6 +159,13 @@ const Visualization: React.FC = () => {
             }
         });
       }
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSearch(e as unknown as React.FormEvent);
     }
   };
 
@@ -427,17 +443,19 @@ const Visualization: React.FC = () => {
             <div className="max-w-3xl mx-auto pointer-events-auto">
                 <form onSubmit={handleSearch} className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition duration-500"></div>
-                <div className="relative flex items-center bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 focus-within:ring-blue-500/50 transition-all">
-                    <div className="pl-4 text-slate-500">
+                <div className="relative flex items-end bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl backdrop-blur-xl overflow-hidden ring-1 ring-white/5 focus-within:ring-blue-500/50 transition-all">
+                    <div className="pl-4 pb-4 text-slate-500">
                     {isSearching ? <Loader2 className="animate-spin w-5 h-5" /> : <Search className="w-5 h-5" />}
                     </div>
-                    <input 
-                        type="text" 
-                        className="w-full bg-transparent p-4 text-slate-100 placeholder-slate-500 focus:outline-none"
-                        placeholder={conversionUuid ? "Ask a follow-up question..." : "What do you want to research today?"}
+                    <textarea 
+                        ref={textareaRef}
+                        className="w-full bg-transparent p-4 text-slate-100 placeholder-slate-500 focus:outline-none resize-none max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent"
+                        placeholder={conversionUuid ? "Ask a follow-up question... (Ctrl + Enter to send)" : "What do you want to research today? (Ctrl + Enter to send)"}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         disabled={isSearching}
+                        rows={1}
                     />
                     <button 
                     type="submit"
