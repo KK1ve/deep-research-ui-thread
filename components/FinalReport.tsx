@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Viewer } from '@bytemd/react';
 import gfm from '@bytemd/plugin-gfm';
@@ -14,6 +14,16 @@ interface Props {
 }
 
 export const FinalReport: React.FC<Props> = ({ report }) => {
+  const processedContent = useMemo(() => {
+    if (!report) return '';
+    // Replace <source: url> patterns with Markdown links
+    // Example: <source: https://google.com> -> [[Source]](https://google.com)
+    return report.replace(/<source:\s*([^>]+)>/gi, (_, url) => {
+      const cleanUrl = url.trim();
+      return ` [[Source]](${cleanUrl})`;
+    });
+  }, [report]);
+
   if (!report) return null;
 
   return (
@@ -26,7 +36,7 @@ export const FinalReport: React.FC<Props> = ({ report }) => {
         <div className="p-4 md:p-6 text-sm text-slate-200">
            {/* ByteMD Viewer renders with .markdown-body class. Styles are overridden in index.html */}
            <div className="w-full break-words">
-               <Viewer value={report} plugins={plugins} />
+               <Viewer value={processedContent} plugins={plugins} />
            </div>
         </div>
         <div className="bg-green-950/30 p-2 text-center text-[10px] text-green-600/60 uppercase tracking-widest font-semibold">
