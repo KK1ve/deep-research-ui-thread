@@ -44,6 +44,7 @@ export interface ResearchNode {
   children: string[]; // IDs of children
   status: 'streaming' | 'completed' | 'error';
   timestamp: number;
+  isFinal?: boolean; // Indicates if the message type was 'final'
 }
 
 // --- History / Conversion Types ---
@@ -72,6 +73,7 @@ export interface DisplayMessage {
   parent_id?: string | null;
   id?: string | null;
   message: string;
+  type?: MessageType; // Optional type from history if available
 }
 
 export interface MessageEntity {

@@ -95,7 +95,9 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const rawToolArgs = node.toolArgs || '';
 
   // If this is a "complete_task" tool call, it often contains the final answer/report.
-  const isFinalReportTool = isToolCall && node.name === 'complete_task';
+  // We only show the final report card if the node is explicitly marked as 'isFinal', 
+  // which corresponds to type='final' from the backend.
+  const isFinalReportTool = isToolCall && node.name === 'complete_task' && !!node.isFinal;
   const finalReportContent = isFinalReportTool && toolArgs?.report;
 
   return (

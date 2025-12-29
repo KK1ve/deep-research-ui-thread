@@ -98,7 +98,8 @@ const Visualization: React.FC = () => {
         content: query,
         children: [],
         status: 'completed',
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isFinal: true
     };
 
     updateNodes((map) => {
@@ -204,7 +205,13 @@ const Visualization: React.FC = () => {
                       toolResult: displayMsg.role === Role.TOOL ? displayMsg.message : undefined,
                       children: [],
                       status: displayMsg.role === Role.ERROR ? 'error' : 'completed',
-                      timestamp: Date.now()
+                      timestamp: Date.now(),
+                      // If 'type' is available in history, use it. Otherwise, default to true for history items if not specified
+                      // However, to align with the 'only display if type=final' rule, we respect the property if it exists.
+                      // If the backend history doesn't store type, this might hide reports in history. 
+                      // We assume if type is missing in history object, it might be implicitly final for completed tasks. 
+                      // But for this fix, we check if property exists.
+                      isFinal: displayMsg.type === 'final' || displayMsg.type === MessageType.FINAL
                   });
 
                   if (effectiveParentId) {
@@ -224,6 +231,10 @@ const Visualization: React.FC = () => {
                       node.toolArgs = displayMsg.message;
                   } else {
                       node.content = displayMsg.message;
+                  }
+                  // Update isFinal if we encounter a message part that says so
+                  if (displayMsg.type === 'final' || displayMsg.type === MessageType.FINAL) {
+                      node.isFinal = true;
                   }
               }
           };
@@ -293,7 +304,8 @@ const Visualization: React.FC = () => {
           status: 'streaming',
           timestamp: Date.now(),
           toolArgs: '',
-          toolResult: ''
+          toolResult: '',
+          isFinal: false
         };
         
         map.set(nodeId, newNode);
@@ -326,8 +338,10 @@ const Visualization: React.FC = () => {
           newNode.content = (newNode.content || '') + message;
       }
 
+      // Check for FINAL type to mark the node as final
       if (type === MessageType.FINAL) {
         newNode.status = role === Role.ERROR ? 'error' : 'completed';
+        newNode.isFinal = true;
       }
     });
   };
