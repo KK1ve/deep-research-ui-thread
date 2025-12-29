@@ -1,7 +1,13 @@
 import React from 'react';
-import { FileText, Sparkles } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Sparkles } from 'lucide-react';
+import { Viewer } from '@bytemd/react';
+import gfm from '@bytemd/plugin-gfm';
+import highlight from '@bytemd/plugin-highlight';
+
+const plugins = [
+  gfm(),
+  highlight(),
+];
 
 interface Props {
   report: string;
@@ -18,15 +24,9 @@ export const FinalReport: React.FC<Props> = ({ report }) => {
           <h2 className="text-sm font-bold text-green-100">Final Research Report</h2>
         </div>
         <div className="p-4 md:p-6 text-sm text-slate-200">
-           <div className="prose prose-invert prose-sm max-w-none prose-a:text-green-400 prose-headings:text-green-100 prose-strong:text-green-200">
-               <ReactMarkdown 
-                 remarkPlugins={[remarkGfm]}
-                 components={{
-                   a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 underline" />,
-                 }}
-               >
-                 {report}
-               </ReactMarkdown>
+           {/* ByteMD Viewer renders with .markdown-body class. Styles are overridden in index.html */}
+           <div className="w-full break-words">
+               <Viewer value={report} plugins={plugins} />
            </div>
         </div>
         <div className="bg-green-950/30 p-2 text-center text-[10px] text-green-600/60 uppercase tracking-widest font-semibold">

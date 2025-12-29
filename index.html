@@ -1,3 +1,18 @@
+<script type="importmap">
+{
+  "imports": {
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "github-markdown-css/": "https://esm.sh/github-markdown-css@^5.8.1/",
+    "bytemd/": "https://esm.sh/bytemd@^1.22.0/",
+    "@bytemd/react": "https://esm.sh/@bytemd/react@^1.22.0",
+    "@bytemd/plugin-gfm": "https://esm.sh/@bytemd/plugin-gfm@^1.22.0",
+    "@bytemd/plugin-highlight": "https://esm.sh/@bytemd/plugin-highlight@^1.22.0"
+  }
+}
+</script>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,22 +55,24 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #64748b;
         }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
-    "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1"
-  }
-}
-</script>
-</head>
-<body class="bg-background text-slate-200 antialiased h-[100dvh] w-screen overflow-hidden">
-<div id="root" class="h-full w-full"></div>
-<script type="module" src="/index.tsx"></script>
-</body>
-</html>
+
+        /* ByteMD / Markdown Body Overrides for Dark Theme */
+        .markdown-body {
+            background-color: transparent !important;
+            font-family: inherit !important;
+            font-size: inherit !important;
+            color: inherit !important;
+        }
+        .markdown-body pre {
+            background-color: #1e293b !important; /* surface color */
+            border: 1px solid #334155 !important;
+        }
+        .markdown-body code {
+            color: #e2e8f0 !important;
+        }
+        .markdown-body a {
+            color: #60a5fa !important; /* primary blue */
+        }
+        .markdown-body blockquote {
+            color: #94a3b8 !important;
+            border-

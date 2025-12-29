@@ -22,6 +22,7 @@ const Visualization: React.FC = () => {
   const [conversionUuid, setConversionUuid] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   
   // Abort controller to manage cancellation of streams
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -52,6 +53,14 @@ const Visualization: React.FC = () => {
     }
   }, [updateNodes]);
 
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    // Tolerance of 50px to determine if user is at bottom
+    const isAtBottom = scrollHeight - scrollTop - clientHeight <= 50;
+    shouldAutoScrollRef.current = isAtBottom;
+  }, []);
+
   // --- Handlers ---
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -67,6 +76,7 @@ const Visualization: React.FC = () => {
 
     setIsSearching(true);
     setError(null);
+    shouldAutoScrollRef.current = true; // Reset auto-scroll on new search
     
     // Create new controller for this task
     const controller = new AbortController();
@@ -152,6 +162,7 @@ const Visualization: React.FC = () => {
       setError(null);
       setIsSearching(false);
       setHistoryRefreshKey(prev => prev + 1);
+      shouldAutoScrollRef.current = true;
   };
 
   const handleSelectHistory = async (uuid: string) => {
@@ -166,6 +177,7 @@ const Visualization: React.FC = () => {
           setNodes(new Map());
           setRootIds([]);
           setError(null);
+          shouldAutoScrollRef.current = true;
 
           const entities = await fetchConversationDetail(uuid);
           
@@ -321,15 +333,15 @@ const Visualization: React.FC = () => {
   };
 
   useEffect(() => {
-    if (scrollRef.current) {
-        const timeoutId = setTimeout(() => {
+    if (scrollRef.current && shouldAutoScrollRef.current) {
+        // Use requestAnimationFrame to ensure DOM has updated
+        requestAnimationFrame(() => {
             if (scrollRef.current) {
                 scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
             }
-        }, 100);
-        return () => clearTimeout(timeoutId);
+        });
     }
-  }, [nodes]);
+  }, [nodes]); // Trigger on node updates
 
   return (
     <div className="flex h-screen w-full bg-background text-slate-200 overflow-hidden relative">
@@ -377,6 +389,7 @@ const Visualization: React.FC = () => {
           <div 
             className="flex-1 min-h-0 overflow-y-auto px-4 scroll-smooth pb-40" 
             ref={scrollRef}
+            onScroll={handleScroll}
           >
               {rootIds.length === 0 && !isSearching && (
                  <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[40vh]">
