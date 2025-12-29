@@ -41,22 +41,37 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   // Determine the content for the Final Report component
   const finalReportContent = useMemo(() => {
     if (!node?.isFinal) return null;
+    if (node.role === Role.HUMAN) return null;
     
     // 1. Priority: Direct content from the final message
-    // The user requested to display the message data of 'type': 'final'.
-    // This data is accumulated in node.content.
     if (node.content && node.content.trim().length > 0) {
         return node.content;
     }
     
     // 2. Fallback: 'report' field from complete_task tool args
-    // Maintained for backward compatibility or cases where content is empty
     if (node.role === Role.TOOL_CALL && node.name === 'complete_task' && toolArgs?.report) {
         return toolArgs.report;
     }
 
     return null;
   }, [node?.isFinal, node?.content, node?.role, node?.name, toolArgs]);
+
+  // Determine if the node should be visually treated as completed
+  const isEffectivelyDone = useMemo(() => {
+    if (!node) return false;
+    if (node.status === 'completed') return true;
+    
+    // If agent is streaming, check if it has finished a complete_task
+    if (node.role === Role.ASSISTANT) {
+        return node.children.some(childId => {
+            const child = nodes.get(childId);
+            return child?.role === Role.TOOL_CALL && 
+                   child.name === 'complete_task' && 
+                   child.status === 'completed';
+        });
+    }
+    return false;
+  }, [node, nodes]);
 
   if (!node) return null;
 
@@ -89,7 +104,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   }
 
   const getIcon = () => {
-    if (node.status === 'streaming') return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
+    if (node.status === 'streaming' && !isEffectivelyDone) return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
     if (isError || node.status === 'error') return <AlertCircle className="w-4 h-4 text-red-500" />;
     
     switch (node.role) {
@@ -141,7 +156,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                     {node.role.replace('_', ' ')}
                   </span>
               )}
-              {node.status === 'completed' && !isError && !isHuman && (
+              {isEffectivelyDone && !isError && !isHuman && (
                 <CheckCircle2 className="w-3 h-3 text-green-500/50" />
               )}
             </div>
@@ -196,7 +211,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 )}
 
                 {/* 4. Thinking Indicator */}
-                {node.status === 'streaming' && !node.toolResult && (
+                {node.status === 'streaming' && !node.toolResult && !isEffectivelyDone && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                      <Loader2 className="w-3 h-3 animate-spin" />
                      <span className="italic">
