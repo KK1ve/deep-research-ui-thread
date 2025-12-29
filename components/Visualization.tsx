@@ -206,12 +206,8 @@ const Visualization: React.FC = () => {
                       children: [],
                       status: displayMsg.role === Role.ERROR ? 'error' : 'completed',
                       timestamp: Date.now(),
-                      // If 'type' is available in history, use it. Otherwise, default to true for history items if not specified
-                      // However, to align with the 'only display if type=final' rule, we respect the property if it exists.
-                      // If the backend history doesn't store type, this might hide reports in history. 
-                      // We assume if type is missing in history object, it might be implicitly final for completed tasks. 
-                      // But for this fix, we check if property exists.
-                      isFinal: displayMsg.type === 'final' || displayMsg.type === MessageType.FINAL
+                      // Explicitly strict check: only set isFinal if type is exactly 'final'
+                      isFinal: displayMsg.type === MessageType.FINAL || displayMsg.type === 'final'
                   });
 
                   if (effectiveParentId) {
@@ -232,8 +228,9 @@ const Visualization: React.FC = () => {
                   } else {
                       node.content = displayMsg.message;
                   }
-                  // Update isFinal if we encounter a message part that says so
-                  if (displayMsg.type === 'final' || displayMsg.type === MessageType.FINAL) {
+                  
+                  // Update isFinal if strict match found in merged part
+                  if (displayMsg.type === MessageType.FINAL || displayMsg.type === 'final') {
                       node.isFinal = true;
                   }
               }
@@ -338,8 +335,8 @@ const Visualization: React.FC = () => {
           newNode.content = (newNode.content || '') + message;
       }
 
-      // Check for FINAL type to mark the node as final
-      if (type === MessageType.FINAL) {
+      // STRICT CHECK: Only mark as final if message type is strictly 'final'
+      if (type === MessageType.FINAL || type === 'final') {
         newNode.status = role === Role.ERROR ? 'error' : 'completed';
         newNode.isFinal = true;
       }
