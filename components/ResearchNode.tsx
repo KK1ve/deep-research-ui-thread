@@ -26,6 +26,38 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
   const node = nodes.get(nodeId);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
+  // Parse tool arguments safely
+  const toolArgs = useMemo(() => {
+    if (node?.role === Role.TOOL_CALL && node.toolArgs) {
+      try {
+        return JSON.parse(node.toolArgs);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }, [node?.role, node?.toolArgs]);
+
+  // Determine the content for the Final Report component
+  const finalReportContent = useMemo(() => {
+    if (!node?.isFinal) return null;
+    
+    // 1. Priority: Direct content from the final message
+    // The user requested to display the message data of 'type': 'final'.
+    // This data is accumulated in node.content.
+    if (node.content && node.content.trim().length > 0) {
+        return node.content;
+    }
+    
+    // 2. Fallback: 'report' field from complete_task tool args
+    // Maintained for backward compatibility or cases where content is empty
+    if (node.role === Role.TOOL_CALL && node.name === 'complete_task' && toolArgs?.report) {
+        return toolArgs.report;
+    }
+
+    return null;
+  }, [node?.isFinal, node?.content, node?.role, node?.name, toolArgs]);
+
   if (!node) return null;
 
   const hasChildren = node.children.length > 0;
@@ -79,26 +111,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
     }
   };
 
-  // Safe JSON parse that handles streaming partial JSON
-  const toolArgs = useMemo(() => {
-    if (isToolCall && node.toolArgs) {
-      try {
-        return JSON.parse(node.toolArgs);
-      } catch (e) {
-        // Return null for invalid JSON so we can render raw string fallback
-        return null;
-      }
-    }
-    return null;
-  }, [isToolCall, node.toolArgs]);
-
   const rawToolArgs = node.toolArgs || '';
-
-  // If this is a "complete_task" tool call, it often contains the final answer/report.
-  // We only show the final report card if the node is explicitly marked as 'isFinal' 
-  // (which strictly comes from type='final' in backend).
-  const isFinalReportTool = isToolCall && node.name === 'complete_task' && node.isFinal === true;
-  const finalReportContent = isFinalReportTool && toolArgs?.report;
 
   return (
     <div className={`flex flex-col mb-2 animate-in fade-in slide-in-from-bottom-2 duration-300 ${isHuman ? 'items-end' : ''}`}>
@@ -172,7 +185,11 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                 )}
 
                 {/* 3. Text Content */}
-                {(!isToolCall) && node.content && (
+                {/* 
+                   If the content is exactly the same as the final report being shown below, 
+                   we hide it here to avoid duplication.
+                */}
+                {(!isToolCall) && node.content && (finalReportContent !== node.content) && (
                 <div className={`whitespace-pre-wrap leading-relaxed opacity-90 font-mono text-xs md:text-sm mt-1 ${isError ? 'text-red-400' : ''}`}>
                     {node.content}
                 </div>
@@ -206,7 +223,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
         )}
       </div>
 
-      {/* Final Report moved outside the main card structure */}
+      {/* Final Report Component */}
       {finalReportContent && (
          <FinalReport report={finalReportContent} />
       )}
