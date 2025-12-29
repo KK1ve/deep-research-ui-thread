@@ -20,9 +20,10 @@ interface Props {
   nodeId: string;
   nodes: Map<string, NodeInterface>;
   depth?: number;
+  ancestorFinished?: boolean;
 }
 
-const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
+const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinished = false }) => {
   const node = nodes.get(nodeId);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -58,6 +59,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
 
   // Determine if the node should be visually treated as completed
   const isEffectivelyDone = useMemo(() => {
+    if (ancestorFinished) return true;
     if (!node) return false;
     if (node.status === 'completed') return true;
     
@@ -71,7 +73,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
         });
     }
     return false;
-  }, [node, nodes]);
+  }, [node, nodes, ancestorFinished]);
 
   if (!node) return null;
 
@@ -230,6 +232,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0 }) => {
                         nodeId={childId} 
                         nodes={nodes} 
                         depth={depth + 1} 
+                        ancestorFinished={isEffectivelyDone}
                         />
                     ))}
                 </div>
