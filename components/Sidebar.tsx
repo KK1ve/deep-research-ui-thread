@@ -45,7 +45,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
 
   const handleDelete = async (e: React.MouseEvent, uuid: string) => {
     e.stopPropagation();
-    if (!window.confirm('Delete this conversation?')) return;
+    if (!window.confirm('确认删除此对话？')) return;
     
     try {
       await deleteConversation(uuid);
@@ -85,7 +85,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
           setEditingId(null);
       } catch (err) {
           console.error('Failed to update title', err);
-          alert('Failed to rename conversation');
+          alert('重命名对话失败');
       } finally {
           setIsSaving(false);
       }
@@ -122,7 +122,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
             <div className="p-4 border-b border-white/5 flex items-center justify-between shrink-0">
                 <div className="font-bold text-slate-200 flex items-center gap-2">
                     <Clock size={18} className="text-blue-400"/>
-                    <span>History</span>
+                    <span>历史记录</span>
                 </div>
                 <button onClick={onClose} className="md:hidden text-slate-400 p-1">
                     <ChevronLeft />
@@ -139,7 +139,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
                     className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white p-3 rounded-lg transition-colors font-medium text-sm shadow-lg shadow-blue-900/20"
                 >
                     <Plus size={18} />
-                    <span>New Research</span>
+                    <span>新建研究</span>
                 </button>
             </div>
 
@@ -147,7 +147,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
             <div className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin">
                 {conversations.length === 0 && !loading && (
                     <div className="text-center text-slate-500 mt-10 text-sm p-4">
-                        No history found.
+                        暂无历史记录。
                     </div>
                 )}
 
@@ -200,7 +200,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
                                 <>
                                     <div className="pr-12">
                                         <div className="font-medium text-sm truncate mb-1" title={conv.title}>
-                                            {conv.title || 'Untitled Research'}
+                                            {conv.title || '未命名研究'}
                                         </div>
                                         <div className="text-[10px] opacity-60 font-mono">
                                             {formatDate(conv.create_time)}
@@ -240,7 +240,7 @@ const Sidebar: React.FC<Props> = ({ activeId, onSelect, onNewChat, isOpen, onClo
                         onClick={() => loadData(page + 1, true)}
                         className="w-full text-center text-xs text-slate-500 hover:text-blue-400 py-3 mt-2 border-t border-white/5"
                     >
-                        Load More
+                        加载更多
                     </button>
                 )}
             </div>

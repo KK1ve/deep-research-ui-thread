@@ -128,6 +128,18 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinis
     }
   };
 
+  const getRoleLabel = (role: Role) => {
+      switch(role) {
+          case Role.ASSISTANT: return '智能体';
+          case Role.HUMAN: return '用户';
+          case Role.TOOL_CALL: return '工具调用';
+          case Role.TOOL: return '工具结果';
+          case Role.SYSTEM: return '系统';
+          case Role.ERROR: return '错误';
+          default: return (role as string).replace('_', ' ');
+      }
+  };
+
   const rawToolArgs = node.toolArgs || '';
 
   return (
@@ -151,11 +163,11 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinis
           <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2">
               <span className={`text-sm font-semibold truncate ${textColor}`}>
-                {isHuman ? 'You' : (node.name || 'Unknown Agent')}
+                {isHuman ? '你' : (node.name || '未知智能体')}
               </span>
               {!isHuman && (
                   <span className="text-xs text-slate-500 uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900">
-                    {node.role.replace('_', ' ')}
+                    {getRoleLabel(node.role)}
                   </span>
               )}
               {isEffectivelyDone && !isError && !isHuman && (
@@ -181,7 +193,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinis
                 {/* 1. Tool Arguments (Input) */}
                 {isToolCall && rawToolArgs && (
                 <div className="flex flex-col gap-1 mb-2 mt-1">
-                    <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Input</span>
+                    <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">输入</span>
                     <div className="bg-slate-950/50 rounded p-2 font-mono text-xs text-orange-200/80 overflow-x-auto border border-orange-500/10">
                         <pre>{toolArgs ? JSON.stringify(toolArgs, null, 2) : rawToolArgs}</pre>
                     </div>
@@ -192,7 +204,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinis
                 {node.toolResult && (
                 <div className="flex flex-col gap-1 mt-2 animate-in fade-in duration-500">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Output</span>
+                        <span className="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">输出</span>
                         <ArrowRightLeft size={10} className="text-slate-600"/>
                     </div>
                     <div className="bg-slate-900/50 rounded p-2 font-mono text-xs text-green-200/70 border border-green-500/10 whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar">
@@ -217,7 +229,7 @@ const ResearchNode: React.FC<Props> = ({ nodeId, nodes, depth = 0, ancestorFinis
                   <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                      <Loader2 className="w-3 h-3 animate-spin" />
                      <span className="italic">
-                        {isToolCall ? 'Executing tool...' : 'Thinking...'}
+                        {isToolCall ? '正在执行工具...' : '思考中...'}
                      </span>
                   </div>
                 )}

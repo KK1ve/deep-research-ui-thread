@@ -144,7 +144,7 @@ const Visualization: React.FC = () => {
           console.log('Search aborted');
           return;
       }
-      setError(err.message || 'An unknown error occurred');
+      setError(err.message || '未知错误');
     } finally {
       // Only reset state if this is still the active controller
       if (abortControllerRef.current === controller) {
@@ -281,7 +281,7 @@ const Visualization: React.FC = () => {
 
       } catch (err: any) {
           if (err.name === 'AbortError' || controller.signal.aborted) return;
-          setError('Failed to load conversation: ' + err.message);
+          setError('加载对话失败: ' + err.message);
       } finally {
           if (abortControllerRef.current === controller) {
               setIsSearching(false);
@@ -403,10 +403,10 @@ const Visualization: React.FC = () => {
                 </div>
                 <div>
                     <h1 className="text-lg md:text-xl font-bold text-slate-100 tracking-tight hidden md:block">
-                    Deep Research Agent
+                    深度研究智能体
                     </h1>
                     <h1 className="text-lg font-bold text-slate-100 tracking-tight md:hidden">
-                    Agent
+                    智能体
                     </h1>
                 </div>
               </div>
@@ -421,7 +421,7 @@ const Visualization: React.FC = () => {
               {rootIds.length === 0 && !isSearching && (
                  <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4 opacity-50 min-h-[40vh]">
                     <Search size={48} strokeWidth={1.5} />
-                    <p>Ready to research</p>
+                    <p>准备开始研究</p>
                  </div>
               )}
 
@@ -450,7 +450,7 @@ const Visualization: React.FC = () => {
                     <textarea 
                         ref={textareaRef}
                         className="w-full bg-transparent p-4 text-slate-100 placeholder-slate-500 focus:outline-none resize-none max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent"
-                        placeholder={conversionUuid ? "Ask a follow-up question... (Ctrl + Enter to send)" : "What do you want to research today? (Ctrl + Enter to send)"}
+                        placeholder={conversionUuid ? "请输入追问... (Ctrl + Enter 发送)" : "今天想研究什么？ (Ctrl + Enter 发送)"}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -472,7 +472,7 @@ const Visualization: React.FC = () => {
                 </form>
                 
                 <div className="text-center mt-3 text-[10px] text-slate-600 font-mono">
-                    AI Agent Research • {isSearching ? 'Processing...' : 'Ready'}
+                    AI 智能体研究 • {isSearching ? '处理中...' : '就绪'}
                 </div>
             </div>
           </div>
